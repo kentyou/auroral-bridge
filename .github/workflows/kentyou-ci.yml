@@ -1,0 +1,38 @@
+name: Kentyou Default CI Build
+
+# Kentyou Default CI Build
+#
+# Automates Java builds and tests for commits to main branch and PRs,
+# using JDK 17 and caching Maven dependencies.
+#
+# Deploys artifacts to GitHub Packages on main branch commits.
+#
+# Note: Ignores all tags as they are checked and built
+#       using the tag-publish.yml workflow.
+#
+# The "source" version of this workflow is in our .github repository.
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+    - name: Set up JDK 17
+      uses: actions/setup-java@99b8673ff64fbf99d8d325f52d9a5bdedb8483e9 # v4.2.1
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: maven
+    - name: CI Build
+      uses: kentyou/build-automation/actions/maven-build@9d8394e48c2423deae9ed7655cb7c40539b346a2 # v1.3.0
+      with:
+        deploy-gh-packages: ${{ github.ref == 'refs/heads/main'}}
+        repo-secret: ${{ secrets.KENTYOU_CI_PAT }}
