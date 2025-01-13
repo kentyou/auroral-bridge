@@ -1,0 +1,74 @@
+{
+  "message": [
+    {
+      "timestamp": "2024-05-01T00:00:00+00:00",
+      "log_total_count": 2,
+      "per_route": [
+        {
+          "log_total_retention_time": 18,
+          "log_average_retention_time": 9,
+          "log_count": 2,
+          "log_device_count": 0,
+          "log_session_count": 2,
+          "log_source_qrcode_count": 2,
+          "log_source_qrcode_count_per_mille": 1000,
+          "rank": 1,
+          "log_route_type": "activity",
+          "activity": {
+            "activity_id": "31b45057-b469-4483-b05a-1de81e8483ed",
+            "activity_image": "https://asset.myoha.at/file/abc31200-c1a0-4f75-b64f-5cda5ac4f438.png",
+            "activity_title": "Emil Magdić - Tidligere fange i Beisfjord",
+            "channel_id": "6d4e5a5f-7562-498c-a503-b98af7dfd3ae"
+          },
+          "article": null,
+          "page": null
+        },
+        {
+          "log_total_retention_time": 9,
+          "log_average_retention_time": 9,
+          "log_count": 1,
+          "log_device_count": 0,
+          "log_session_count": 1,
+          "log_source_qrcode_count": 1,
+          "log_source_qrcode_count_per_mille": 1000,
+          "rank": 2,
+          "log_route_type": "activity",
+          "activity": {
+            "activity_id": "91a9876e-4b45-46f8-a6ef-9e65c82c9d81",
+            "activity_image": "https://asset.myoha.at/file/0536f0b1-ce6e-4096-add1-2e179ef84c16.png",
+            "activity_title": "Slavko Vukić – Tidligere fange i Beisfjord",
+            "channel_id": "6d4e5a5f-7562-498c-a503-b98af7dfd3ae"
+          },
+          "article": null,
+          "page": null
+        }
+      ]
+    },
+    {
+      "timestamp": "2024-05-02T00:00:00+00:00",
+      "log_total_count": 1,
+      "per_route": [
+        {
+          "log_total_retention_time": 9,
+          "log_average_retention_time": 9,
+          "log_count": 1,
+          "log_device_count": 0,
+          "log_session_count": 1,
+          "log_source_qrcode_count": 1,
+          "log_source_qrcode_count_per_mille": 1000,
+          "rank": 1,
+          "log_route_type": "activity",
+          "activity": {
+            "activity_id": "31b45057-b469-4483-b05a-1de81e8483ed",
+            "activity_image": "https://asset.myoha.at/file/abc31200-c1a0-4f75-b64f-5cda5ac4f438.png",
+            "activity_title": "Emil Magdić - Tidligere fange i Beisfjord",
+            "channel_id": "6d4e5a5f-7562-498c-a503-b98af7dfd3ae"
+          },
+          "article": null,
+          "page": null
+        }
+      ]
+    }
+  ],
+  "statusCode": 200
+}
