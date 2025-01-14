@@ -20,7 +20,7 @@
   <version>0.0.1-SNAPSHOT</version>
   <packaging>pom</packaging>
 
-  <name>Auroral Bridge Parent Project</name>
+  <name>Auroral Bridge Project</name>
 
   <properties>
     <!-- Build properties -->
