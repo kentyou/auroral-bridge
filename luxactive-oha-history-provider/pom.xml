@@ -33,6 +33,11 @@
     </dependency>
 
     <dependency>
+      <groupId>com.kentyou.sensinact</groupId>
+      <artifactId>history.api</artifactId>
+    </dependency>
+
+    <dependency>
       <groupId>org.eclipse.sensinact.gateway.core</groupId>
       <artifactId>api</artifactId>
     </dependency>
