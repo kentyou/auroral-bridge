@@ -41,7 +41,7 @@ import org.osgi.test.common.annotation.InjectService;
 import org.osgi.util.promise.Promise;
 import org.osgi.util.promise.PromiseFactory;
 
-public class BridgeCallTest {
+public class LuxActiveBridgeTest {
 
     static QueuedThreadPool threadPool;
     static Server server;
@@ -93,7 +93,7 @@ public class BridgeCallTest {
     }
 
     @Test
-    void testCall() throws Exception {
+    void testCurrentValues() throws Exception {
         final String auroralProviderName = "auroralBridge";
         final String ohaProviderName = "ohaProvider";
         final String baseUrl = "http://localhost:" + httpPort;
