@@ -224,7 +224,7 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
             SensinactProvider provider = twin.getProvider(bridgeProvider);
             if (provider == null) {
                 return pf.failed(
-                        new IllegalStateException("Auroral Bridge provider" + bridgeProvider + " is not available"));
+                        new IllegalStateException("Auroral Bridge provider " + bridgeProvider + " is not available"));
             }
 
             SensinactService actionSvc = provider.getServices().get(bridgeServiceName);
@@ -290,6 +290,8 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
                                 result.resource = rcName;
                                 result.value = value;
                                 result.type = type;
+                                result.nullAction = NullAction.UPDATE_IF_PRESENT;
+                                result.duplicateDataAction = DuplicateAction.UPDATE_ALWAYS;
                                 return result;
                             }
                         }));
