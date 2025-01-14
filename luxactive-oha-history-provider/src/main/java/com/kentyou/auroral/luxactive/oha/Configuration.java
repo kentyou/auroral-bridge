@@ -38,4 +38,9 @@ public @interface Configuration {
      * oHA Realm ID
      */
     String oha_realm();
+
+    /**
+     * Time zone for the oHA realm
+     */
+    String oha_time_zone() default "UTC";
 }

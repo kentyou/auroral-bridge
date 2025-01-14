@@ -22,6 +22,11 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 public class ArticleDTO extends AbstractRouteDTO {
 
+    public static final String RC_ID = "id";
+    public static final String RC_TITLE = "title";
+    public static final String RC_PAGE_ID = "pageId";
+    public static final String[] RESOURCES = { RC_ID, RC_TITLE, RC_PAGE_ID };
+
     @JsonProperty("article_id")
     public String id;
 
@@ -39,9 +44,28 @@ public class ArticleDTO extends AbstractRouteDTO {
     @Override
     public List<GenericDto> toDto(final DtoMaker maker) {
         final List<GenericDto> dtos = new ArrayList<>(3);
-        dtos.add(maker.make("id", id, String.class));
-        dtos.add(maker.make("title", title, String.class));
-        dtos.add(maker.make("pageId", pageId, String.class));
+        dtos.add(maker.make(RC_ID, id, String.class));
+        dtos.add(maker.make(RC_TITLE, title, String.class));
+        dtos.add(maker.make(RC_PAGE_ID, pageId, String.class));
         return dtos;
+    }
+
+    @Override
+    public String getType() {
+        return "article";
+    }
+
+    @Override
+    public Object getFieldByName(String rcName) {
+        switch (rcName) {
+            case RC_ID:
+                return this.id;
+            case RC_TITLE:
+                return this.title;
+            case RC_PAGE_ID:
+                return this.pageId;
+            default:
+                return null;
+        }
     }
 }

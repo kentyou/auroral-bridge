@@ -22,6 +22,12 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 public class PageDTO extends AbstractRouteDTO {
 
+    public static final String RC_ID = "id";
+    public static final String RC_TITLE = "title";
+    public static final String RC_LANGUAGE = "language";
+    public static final String RC_PAGE_TYPE = "pageType";
+    public static final String[] RESOURCES = { RC_ID, RC_TITLE, RC_LANGUAGE, RC_PAGE_TYPE };
+
     @JsonProperty("page_id")
     public String id;
 
@@ -42,10 +48,31 @@ public class PageDTO extends AbstractRouteDTO {
     @Override
     public List<GenericDto> toDto(final DtoMaker maker) {
         final List<GenericDto> dtos = new ArrayList<>(4);
-        dtos.add(maker.make("id", id, String.class));
-        dtos.add(maker.make("title", title, String.class));
-        dtos.add(maker.make("language", language, String.class));
-        dtos.add(maker.make("pageType", type, String.class));
+        dtos.add(maker.make(RC_ID, id, String.class));
+        dtos.add(maker.make(RC_TITLE, title, String.class));
+        dtos.add(maker.make(RC_LANGUAGE, language, String.class));
+        dtos.add(maker.make(RC_PAGE_TYPE, type, String.class));
         return dtos;
+    }
+
+    @Override
+    public String getType() {
+        return "page";
+    }
+
+    @Override
+    public Object getFieldByName(String rcName) {
+        switch (rcName) {
+            case RC_ID:
+                return this.id;
+            case RC_TITLE:
+                return this.title;
+            case RC_LANGUAGE:
+                return this.language;
+            case RC_PAGE_TYPE:
+                return this.type;
+            default:
+                return null;
+        }
     }
 }

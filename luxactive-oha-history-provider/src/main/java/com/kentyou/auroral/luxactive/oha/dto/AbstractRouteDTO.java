@@ -19,7 +19,31 @@ import org.eclipse.sensinact.core.push.dto.GenericDto;
 
 public abstract class AbstractRouteDTO {
 
+    /**
+     * Returns the ID of the route
+     */
     public abstract String getId();
 
+    /**
+     * Converts the route to a list of DTO
+     *
+     * @param maker DTO generator
+     * @return The generated DTOs (can't be null)
+     */
     public abstract List<GenericDto> toDto(DtoMaker maker);
+
+    /**
+     * Returns the type of route
+     *
+     * @return Kind of route
+     */
+    public abstract String getType();
+
+    /**
+     * Return the value of a field by its resource name
+     *
+     * @param rcName Name of the resource
+     * @return The value of that field or null
+     */
+    public abstract Object getFieldByName(String rcName);
 }

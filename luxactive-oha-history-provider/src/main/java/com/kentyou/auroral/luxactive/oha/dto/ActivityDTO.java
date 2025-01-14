@@ -22,6 +22,12 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 public class ActivityDTO extends AbstractRouteDTO {
 
+    public static final String RC_ID = "id";
+    public static final String RC_TITLE = "title";
+    public static final String RC_IMAGE = "image";
+    public static final String RC_CHANNEL_ID = "channelId";
+    public static final String[] RESOURCES = { RC_ID, RC_TITLE, RC_IMAGE, RC_CHANNEL_ID };
+
     @JsonProperty("activity_id")
     public String id;
 
@@ -42,10 +48,31 @@ public class ActivityDTO extends AbstractRouteDTO {
     @Override
     public List<GenericDto> toDto(final DtoMaker maker) {
         final List<GenericDto> dtos = new ArrayList<>(4);
-        dtos.add(maker.make("id", id, String.class));
-        dtos.add(maker.make("image", image, String.class));
-        dtos.add(maker.make("title", title, String.class));
-        dtos.add(maker.make("channelId", channelId, String.class));
+        dtos.add(maker.make(RC_ID, id, String.class));
+        dtos.add(maker.make(RC_TITLE, title, String.class));
+        dtos.add(maker.make(RC_IMAGE, image, String.class));
+        dtos.add(maker.make(RC_CHANNEL_ID, channelId, String.class));
         return dtos;
+    }
+
+    @Override
+    public String getType() {
+        return "activity";
+    }
+
+    @Override
+    public Object getFieldByName(String rcName) {
+        switch (rcName) {
+            case RC_ID:
+                return this.id;
+            case RC_TITLE:
+                return this.title;
+            case RC_IMAGE:
+                return this.image;
+            case RC_CHANNEL_ID:
+                return this.channelId;
+            default:
+                return null;
+        }
     }
 }

@@ -13,16 +13,26 @@
 
 package com.kentyou.auroral.luxactive.oha;
 
+import java.lang.reflect.InvocationTargetException;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.eclipse.sensinact.core.command.AbstractTwinCommand;
 import org.eclipse.sensinact.core.command.GatewayThread;
@@ -33,6 +43,7 @@ import org.eclipse.sensinact.core.twin.SensinactDigitalTwin;
 import org.eclipse.sensinact.core.twin.SensinactProvider;
 import org.eclipse.sensinact.core.twin.SensinactResource;
 import org.eclipse.sensinact.core.twin.SensinactService;
+import org.eclipse.sensinact.core.twin.TimedValue;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
 import org.osgi.service.component.annotations.ConfigurationPolicy;
@@ -50,9 +61,13 @@ import com.kentyou.auroral.luxactive.oha.dto.AbstractRouteDTO;
 import com.kentyou.auroral.luxactive.oha.dto.DtoMaker;
 import com.kentyou.auroral.luxactive.oha.dto.StatEntryDTO;
 import com.kentyou.auroral.luxactive.oha.dto.StatLogEntryDTO;
+import com.kentyou.sensinact.history.dto.single.HistoricResourceValue;
+import com.kentyou.sensinact.history.dto.single.SingleHistoricValueResponse;
+import com.kentyou.sensinact.history.spi.ResourcePath;
+import com.kentyou.sensinact.history.spi.SimpleHistory;
 
 @Component(immediate = true, configurationPid = "luxactive.oha.statistics", configurationPolicy = ConfigurationPolicy.REQUIRE)
-public class LuxActiveHistoryProvider {
+public class LuxActiveHistoryProvider implements SimpleHistory {
 
     private final static Logger logger = LoggerFactory.getLogger(LuxActiveHistoryProvider.class);
 
@@ -103,6 +118,16 @@ public class LuxActiveHistoryProvider {
      */
     private String realmId;
 
+    /**
+     * Time offset for each queries
+     */
+    private ZoneId timeZone;
+
+    /**
+     * Keep track of known route IDs to tell the history provider and of their type
+     */
+    private Map<String, String> knownRouteIds = new HashMap<>();
+
     @Activate
     void activate(final Configuration config) throws Exception {
         providerName = config.provider();
@@ -135,6 +160,13 @@ public class LuxActiveHistoryProvider {
             throw new IllegalArgumentException("LuxActive realm ID not set");
         }
 
+        final String strTz = config.oha_time_zone();
+        if (strTz == null || strTz.isBlank()) {
+            timeZone = ZoneId.of("Z");
+        } else {
+            timeZone = ZoneId.of(strTz);
+        }
+
         scheduler = new ScheduledThreadPoolExecutor(1);
 
         // Call the update method right now to feed in current values
@@ -162,6 +194,28 @@ public class LuxActiveHistoryProvider {
         if (!updateCurrentValues()) {
             scheduler.schedule(this::tryUpdateCurrentValues, 5, TimeUnit.SECONDS);
         }
+    }
+
+    private List<StatEntryDTO> loadStatEntries(final String routeType, final OffsetDateTime dateFrom,
+            final OffsetDateTime dateTo, final String aggregationWindow)
+            throws InvocationTargetException, InterruptedException {
+
+        final Object rawResult = thread.execute(new AbstractTwinCommand<Object>() {
+            @Override
+            protected Promise<Object> call(SensinactDigitalTwin twin, PromiseFactory pf) {
+                return callAction(twin, pf, Map.of("route_type", routeType, "realm_id", realmId, "date_from",
+                        dateFrom.format(DateTimeFormatter.ISO_OFFSET_DATE), "date_to",
+                        dateTo.format(DateTimeFormatter.ISO_OFFSET_DATE), "aggregation_window", aggregationWindow));
+            }
+        }).getValue();
+
+        if (rawResult == null || !(rawResult instanceof List)) {
+            logger.warn("Invalid result returned by action");
+            return null;
+        }
+
+        return mapper.convertValue(rawResult, new TypeReference<List<StatEntryDTO>>() {
+        });
     }
 
     private Promise<Object> callAction(final SensinactDigitalTwin twin, final PromiseFactory pf,
@@ -196,23 +250,12 @@ public class LuxActiveHistoryProvider {
      */
     boolean updateCurrentValues() {
         try {
-            final Object rawResult = thread.execute(new AbstractTwinCommand<Object>() {
-                @Override
-                protected Promise<Object> call(SensinactDigitalTwin twin, PromiseFactory pf) {
-                    // TODO set arguments
-                    return callAction(twin, pf, Map.of());
-                }
-            }).getValue();
-
-            if (rawResult == null || !(rawResult instanceof List)) {
-                logger.warn("Invalid result returned by action");
+            final List<StatEntryDTO> statEntries = loadStatEntries("all", OffsetDateTime.now(timeZone).minusDays(2),
+                    OffsetDateTime.now(timeZone), "hour");
+            if (statEntries == null) {
+                // No entries
                 return false;
             }
-
-            final List<StatEntryDTO> statEntries = mapper.convertValue(rawResult,
-                    new TypeReference<List<StatEntryDTO>>() {
-                    });
-
             final Map<String, List<GenericDto>> latestDetails = new HashMap<>();
             for (StatEntryDTO statEntry : statEntries) {
                 if (statEntry.timestamp == null || statEntry.timestamp.isBlank()) {
@@ -250,6 +293,8 @@ public class LuxActiveHistoryProvider {
                                 return result;
                             }
                         }));
+
+                        knownRouteIds.put(routeDto.getId(), routeDto.getType());
                     }
                 }
             }
@@ -265,5 +310,84 @@ public class LuxActiveHistoryProvider {
             logger.error("Error updating current values", e);
             return false;
         }
+    }
+
+    @Override
+    public Set<ResourcePath> getProvidedPaths() {
+        final Map<String, List<String>> rcPerRouteType = knownRouteIds.values().stream().distinct()
+                .collect(Collectors.toMap(Function.identity(), StatLogEntryDTO::getResources));
+
+        return knownRouteIds.entrySet().stream().flatMap(e -> {
+            final String routeId = e.getKey();
+            final List<String> rcs = rcPerRouteType.get(e.getValue());
+            if (rcs == null || rcs.isEmpty()) {
+                return Stream.empty();
+            }
+            return rcs.stream().map(rcName -> new ResourcePath(providerName, providerName, routeId, rcName));
+        }).collect(Collectors.toSet());
+    }
+
+    /**
+     * Prepare an historic resource value bean
+     *
+     * @param routeId   oHA route ID
+     * @param rcName    Resource (sensiNact) name
+     * @param value     Historic value
+     * @param timestamp Value time stamp
+     * @return An historic resource value bean
+     */
+    private HistoricResourceValue makeHistoricResourceValue(final String routeId, final String rcName,
+            final Object value, final Instant timestamp) {
+        final HistoricResourceValue hrv = new HistoricResourceValue();
+        hrv.provider = providerName;
+        hrv.service = routeId;
+        hrv.resource = rcName;
+        hrv.dto = new TimedValue<Object>() {
+            @Override
+            public Instant getTimestamp() {
+                return timestamp;
+            }
+
+            @Override
+            public Object getValue() {
+                return value;
+            }
+        };
+        return hrv;
+    }
+
+    @Override
+    public SingleHistoricValueResponse getValueRange(final String provider, final String service, final String resource,
+            final Instant fromTime, final Instant toTime) {
+        if (!providerName.equals(provider)) {
+            // Wrong provider
+            return null;
+        }
+
+        final List<StatEntryDTO> statEntries;
+        try {
+            statEntries = loadStatEntries("all", OffsetDateTime.ofInstant(fromTime, timeZone),
+                    OffsetDateTime.ofInstant(toTime, timeZone), "hour");
+        } catch (Exception e) {
+            logger.error("Error retrieving statistics for provider {} and route ID {}", provider, service, e);
+            return null;
+        }
+        if (statEntries == null) {
+            return null;
+        }
+
+        final List<HistoricResourceValue> hrcs = new ArrayList<>();
+        for (StatEntryDTO stat : statEntries) {
+            final Instant timestamp = Instant.parse(stat.timestamp);
+            final Optional<StatLogEntryDTO> optLogEntry = stat.perRoute.stream().filter(
+                    sle -> Optional.ofNullable(sle.getRoute()).map(r -> service.equals(r.getId())).orElse(false))
+                    .findFirst();
+            hrcs.add(makeHistoricResourceValue(service, resource,
+                    optLogEntry.map(le -> le.getFieldByName(resource)).orElse(null), timestamp));
+        }
+
+        final SingleHistoricValueResponse shvr = new SingleHistoricValueResponse();
+        shvr.values = hrcs;
+        return shvr;
     }
 }
