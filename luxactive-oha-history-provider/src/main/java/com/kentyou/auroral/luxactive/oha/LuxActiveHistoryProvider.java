@@ -160,7 +160,7 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
             throw new IllegalArgumentException("LuxActive realm ID not set");
         }
 
-        final String strTz = config.oha_time_zone();
+        final String strTz = config.oha_timezone();
         if (strTz == null || strTz.isBlank()) {
             timeZone = ZoneId.of("Z");
         } else {

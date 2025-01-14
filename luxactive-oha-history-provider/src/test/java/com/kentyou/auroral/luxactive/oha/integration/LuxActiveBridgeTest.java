@@ -14,11 +14,14 @@
 package com.kentyou.auroral.luxactive.oha.integration;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.FileNotFoundException;
 import java.io.InputStream;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Hashtable;
@@ -33,13 +36,22 @@ import org.eclipse.sensinact.core.command.GatewayThread;
 import org.eclipse.sensinact.core.snapshot.ProviderSnapshot;
 import org.eclipse.sensinact.core.twin.SensinactDigitalTwin;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.opentest4j.AssertionFailedError;
+import org.osgi.framework.BundleContext;
 import org.osgi.service.cm.Configuration;
 import org.osgi.service.cm.ConfigurationAdmin;
+import org.osgi.test.common.annotation.InjectBundleContext;
 import org.osgi.test.common.annotation.InjectService;
 import org.osgi.util.promise.Promise;
 import org.osgi.util.promise.PromiseFactory;
+import org.osgi.util.tracker.ServiceTracker;
+
+import com.kentyou.sensinact.history.dto.single.SingleHistoricValueResponse;
+import com.kentyou.sensinact.history.spi.SimpleHistory;
 
 public class LuxActiveBridgeTest {
 
@@ -48,11 +60,28 @@ public class LuxActiveBridgeTest {
     static RequestHandler handler;
     static int httpPort;
 
+    static final String auroralProviderName = "auroralBridge";
+
     @InjectService
     GatewayThread thread;
 
     @InjectService
     ConfigurationAdmin cm;
+
+    @InjectBundleContext
+    BundleContext ctx;
+
+    final AtomicReference<Map<String, String>> arguments = new AtomicReference<>();
+
+    /**
+     * Current Auroral bridge configuration
+     */
+    Configuration auroralConfig;
+
+    /**
+     * Current oHA bridge configuration
+     */
+    Configuration ohaConfig;
 
     @BeforeAll
     static void setup() throws Exception {
@@ -92,62 +121,71 @@ public class LuxActiveBridgeTest {
         }
     }
 
-    @Test
-    void testCurrentValues() throws Exception {
-        final String auroralProviderName = "auroralBridge";
-        final String ohaProviderName = "ohaProvider";
+    /**
+     * Wait for the appearance of a provider
+     *
+     * @param providerName Name of the provider
+     */
+    void waitForProvider(final String providerName)
+            throws AssertionFailedError, InvocationTargetException, InterruptedException {
+        boolean found = false;
+        for (int i = 0; i < 10; i++) {
+            found = thread.execute(new AbstractTwinCommand<Boolean>() {
+                @Override
+                protected Promise<Boolean> call(SensinactDigitalTwin twin, PromiseFactory pf) {
+                    return pf.resolved(twin.getProvider(providerName) != null);
+                }
+            }).getValue();
+            if (found) {
+                break;
+            }
+
+            Thread.sleep(100);
+        }
+        assertTrue(found, "Provider '" + providerName + "' not found");
+    }
+
+    @BeforeEach
+    void setupBridge() throws Exception {
         final String baseUrl = "http://localhost:" + httpPort;
 
         // Create a configuration for the Auroral Bridge
-        final Configuration auroralConfig = cm.createFactoryConfiguration("auroral.explicit", "?");
+        auroralConfig = cm.createFactoryConfiguration("auroral.explicit", "?");
         auroralConfig.update(new Hashtable<>(Map.of("auroral.node.url", baseUrl, "oid.local", "123", "oid.remote",
                 "456", "provider.name", auroralProviderName, "actions",
                 "{\"log-stats-hourly-by-date-range\": {\"service\": \"svc\", \"sna.alias\": \"logHourlyByDateRange\", \"resultType\": \"array\", \"arguments\": {\"route_type\": {\"type\": \"string\"}, \"realm_id\": {\"type\": \"string\"}, \"date_from\": {\"type\": \"string\"}, \"date_to\": {\"type\": \"string\"}, \"aggregation_window\": {\"type\": \"string\"}}}}")));
 
         // Prepare the HTTP server
         final String response = readFile("result-log-stats-hourly-by-date-range-page.json");
-        final AtomicReference<Map<String, String>> arguments = new AtomicReference<>();
         handler.setHandler("/api/properties/123/456/log-stats-hourly-by-date-range", (t, a) -> {
             arguments.set(a);
             return response;
         });
 
-        boolean found = false;
-        for (int i = 0; i < 10; i++) {
-            found = thread.execute(new AbstractTwinCommand<Boolean>() {
-                @Override
-                protected Promise<Boolean> call(SensinactDigitalTwin twin, PromiseFactory pf) {
-                    return pf.resolved(twin.getProvider(auroralProviderName) != null);
-                }
-            }).getValue();
-            if (found) {
-                break;
-            }
+        waitForProvider(auroralProviderName);
+    }
 
-            Thread.sleep(100);
+    @AfterEach
+    void cleanupTest() throws Exception {
+        if (auroralConfig != null) {
+            auroralConfig.delete();
+            auroralConfig = null;
         }
-        assertTrue(found, "Auroral bridge provider not found");
 
+        if (ohaConfig != null) {
+            ohaConfig.delete();
+            ohaConfig = null;
+        }
+    }
+
+    @Test
+    void testCurrentValues() throws Exception {
         // Create a configuration for the oHA stats handler
-        final Configuration ohaConfig = cm.createFactoryConfiguration("luxactive.oha.statistics", "?");
+        final String ohaProviderName = "ohaProvider-current";
+        ohaConfig = cm.createFactoryConfiguration("luxactive.oha.statistics", "?");
         ohaConfig.update(new Hashtable<>(Map.of("provider", ohaProviderName, "bridge.provider", auroralProviderName,
                 "bridge.action", "logHourlyByDateRange", "bridge.action.service", "svc", "oha.realm", "789")));
-
-        found = false;
-        for (int i = 0; i < 10; i++) {
-            found = thread.execute(new AbstractTwinCommand<Boolean>() {
-                @Override
-                protected Promise<Boolean> call(SensinactDigitalTwin twin, PromiseFactory pf) {
-                    return pf.resolved(twin.getProvider(ohaProviderName) != null);
-                }
-            }).getValue();
-            if (found) {
-                break;
-            }
-
-            Thread.sleep(100);
-        }
-        assertTrue(found, "oHA history provider not found");
+        waitForProvider(ohaProviderName);
 
         // Check its values
         final ProviderSnapshot ps = thread.execute(new AbstractTwinCommand<ProviderSnapshot>() {
@@ -188,5 +226,104 @@ public class LuxActiveBridgeTest {
                 ps.getResource("91a9876e-4b45-46f8-a6ef-9e65c82c9d81", "title").getValue().getValue());
         assertEquals("6d4e5a5f-7562-498c-a503-b98af7dfd3ae",
                 ps.getResource("91a9876e-4b45-46f8-a6ef-9e65c82c9d81", "channelId").getValue().getValue());
+    }
+
+    @Test
+    void testHistory() throws Exception {
+        // Create a configuration for the oHA stats handler
+        final String ohaProviderName = "ohaProvider-history";
+        ohaConfig = cm.createFactoryConfiguration("luxactive.oha.statistics", "?");
+        ohaConfig.update(new Hashtable<>(Map.of("provider", ohaProviderName, "bridge.provider", auroralProviderName,
+                "bridge.action", "logHourlyByDateRange", "bridge.action.service", "svc", "oha.realm", "789")));
+        waitForProvider(ohaProviderName);
+
+        ServiceTracker<SimpleHistory, SimpleHistory> tracker = new ServiceTracker<>(ctx, SimpleHistory.class, null);
+        tracker.open();
+        SimpleHistory historyApi = tracker.waitForService(1000);
+        tracker.close();
+
+        // Call the history API
+        assertEquals(26, historyApi.getProvidedPaths().size()); // 13 per route
+        Instant fromTime = Instant.parse("2024-05-01T00:00:00Z");
+        Instant toTime = Instant.parse("2024-05-02T00:00:00Z");
+
+        // Note: the payload sent back by the test server will always be the same
+        arguments.set(null);
+        SingleHistoricValueResponse history = historyApi.getValueRange(ohaProviderName,
+                "31b45057-b469-4483-b05a-1de81e8483ed", "totalRetentionTime", fromTime, toTime);
+
+        Map<String, String> args = arguments.getAndSet(null);
+        assertNotNull(args);
+        assertEquals("all", args.get("route_type"));
+        assertEquals("789", args.get("realm_id"));
+        assertEquals("2024-05-01Z", args.get("date_from"));
+        assertEquals("2024-05-02Z", args.get("date_to"));
+        assertEquals("hour", args.get("aggregation_window"));
+        assertEquals(2, history.values.size());
+        assertEquals(18d, history.values.get(0).dto.getValue());
+        assertEquals(9d, history.values.get(1).dto.getValue());
+
+        fromTime = Instant.parse("2024-05-01T00:00:00Z");
+        toTime = Instant.parse("2024-05-01T12:00:00Z");
+        history = historyApi.getValueRange(ohaProviderName, "31b45057-b469-4483-b05a-1de81e8483ed",
+                "totalRetentionTime", fromTime, toTime);
+
+        args = arguments.getAndSet(null);
+        assertNotNull(args);
+        assertEquals("all", args.get("route_type"));
+        assertEquals("789", args.get("realm_id"));
+        assertEquals("2024-05-01Z", args.get("date_from"));
+        assertEquals("2024-05-01Z", args.get("date_to"));
+        assertEquals("hour", args.get("aggregation_window"));
+    }
+
+    @Test
+    void testTimezone() throws Exception {
+        // Create a configuration for the oHA stats handler
+        final String ohaProviderName = "ohaProvider-tz";
+        ohaConfig = cm.createFactoryConfiguration("luxactive.oha.statistics", "?");
+        ohaConfig.update(new Hashtable<>(Map.of("provider", ohaProviderName, "bridge.provider", auroralProviderName,
+                "bridge.action", "logHourlyByDateRange", "bridge.action.service", "svc", "oha.realm", "789",
+                "oha.timezone", "Europe/Oslo")));
+        waitForProvider(ohaProviderName);
+
+        ServiceTracker<SimpleHistory, SimpleHistory> tracker = new ServiceTracker<>(ctx, SimpleHistory.class, null);
+        tracker.open();
+        SimpleHistory historyApi = tracker.waitForService(1000);
+        tracker.close();
+
+        // Call the history API
+        assertEquals(26, historyApi.getProvidedPaths().size()); // 13 per route
+        Instant fromTime = Instant.parse("2024-05-01T00:00:00Z");
+        Instant toTime = Instant.parse("2024-05-02T00:00:00Z");
+
+        // Note: the payload sent back by the test server will always be the same
+        arguments.set(null);
+        SingleHistoricValueResponse history = historyApi.getValueRange(ohaProviderName,
+                "31b45057-b469-4483-b05a-1de81e8483ed", "totalRetentionTime", fromTime, toTime);
+
+        Map<String, String> args = arguments.getAndSet(null);
+        assertNotNull(args);
+        assertEquals("all", args.get("route_type"));
+        assertEquals("789", args.get("realm_id"));
+        assertEquals("2024-05-01+02:00", args.get("date_from"));
+        assertEquals("2024-05-02+02:00", args.get("date_to"));
+        assertEquals("hour", args.get("aggregation_window"));
+        assertEquals(2, history.values.size());
+        assertEquals(18d, history.values.get(0).dto.getValue());
+        assertEquals(9d, history.values.get(1).dto.getValue());
+
+        fromTime = Instant.parse("2024-05-01T00:00:00Z");
+        toTime = Instant.parse("2024-05-01T12:00:00Z");
+        history = historyApi.getValueRange(ohaProviderName, "31b45057-b469-4483-b05a-1de81e8483ed",
+                "totalRetentionTime", fromTime, toTime);
+
+        args = arguments.getAndSet(null);
+        assertNotNull(args);
+        assertEquals("all", args.get("route_type"));
+        assertEquals("789", args.get("realm_id"));
+        assertEquals("2024-05-01+02:00", args.get("date_from"));
+        assertEquals("2024-05-01+02:00", args.get("date_to"));
+        assertEquals("hour", args.get("aggregation_window"));
     }
 }

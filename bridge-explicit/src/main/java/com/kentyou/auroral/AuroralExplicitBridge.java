@@ -26,6 +26,7 @@ import org.eclipse.sensinact.core.command.AbstractSensinactCommand;
 import org.eclipse.sensinact.core.command.AbstractTwinCommand;
 import org.eclipse.sensinact.core.command.GatewayThread;
 import org.eclipse.sensinact.core.model.Model;
+import org.eclipse.sensinact.core.model.Resource;
 import org.eclipse.sensinact.core.model.ResourceType;
 import org.eclipse.sensinact.core.model.SensinactModelManager;
 import org.eclipse.sensinact.core.model.Service;
@@ -205,8 +206,16 @@ public class AuroralExplicitBridge {
                         model = modelMgr.getModel(providerName);
                     }
 
+                    // Check if a provider already exists
+                    SensinactProvider provider = twin.getProvider(providerName);
                     if (model == null) {
                         // Model doesn't exist
+                        if (provider != null) {
+                            // ... but a provider exists: it will have an incompatible model
+                            throw new IllegalStateException("A provider already exists with a different model");
+                        }
+
+                        // Create the model
                         model = modelMgr.createModel(providerModelPackageUri,
                                 providerModel != null ? providerModel : providerName).build();
                     }
@@ -216,9 +225,10 @@ public class AuroralExplicitBridge {
                         registerActions(model, actions);
                     }
 
-                    // Create the provider
-                    SensinactProvider provider = twin.createProvider(model.getPackageUri(), model.getName(),
-                            providerName);
+                    if (provider == null) {
+                        // Create the provider
+                        provider = twin.createProvider(model.getPackageUri(), model.getName(), providerName);
+                    }
                     return pf.resolved(Map.of("modelPackageUri", provider.getModelPackageUri(), "model",
                             provider.getModelName(), "provider", provider.getName()));
                 } catch (Exception e) {
@@ -239,6 +249,22 @@ public class AuroralExplicitBridge {
                     final List<Entry<String, Class<?>>> params = new ArrayList<>();
                     for (SnaActionArgumentDTO argDto : action.arguments.values()) {
                         params.add(Map.entry(argDto.name, argDto.type));
+                    }
+
+                    Resource existingRc = svc.getResources().get(action.name);
+                    if (existingRc != null) {
+                        if (existingRc.getResourceType() != ResourceType.ACTION) {
+                            // Resource name already taken
+                            logger.error("A resource with name {} already exists but is not action in model {}",
+                                    action.name, model.getName());
+                            throw new IllegalStateException(
+                                    "Action name '" + action.name + "' already taken by another resource");
+                        } else {
+                            // Ignore the action as it's already registered
+                            logger.debug("Already existing action {} is not updated in model {}", action.name,
+                                    model.getName());
+                            continue;
+                        }
                     }
 
                     // Register the action
