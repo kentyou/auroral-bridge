@@ -34,6 +34,8 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.eclipse.sensinact.core.annotation.dto.DuplicateAction;
+import org.eclipse.sensinact.core.annotation.dto.NullAction;
 import org.eclipse.sensinact.core.command.AbstractTwinCommand;
 import org.eclipse.sensinact.core.command.GatewayThread;
 import org.eclipse.sensinact.core.push.DataUpdate;
@@ -361,10 +363,8 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
     @Override
     public SingleHistoricValueResponse getValueRange(final String provider, final String service, final String resource,
             final Instant fromTime, final Instant toTime) {
-        if (!providerName.equals(provider)) {
-            // Wrong provider
-            return null;
-        }
+        final SingleHistoricValueResponse shvr = new SingleHistoricValueResponse();
+        shvr.values = new ArrayList<>();
 
         final List<StatEntryDTO> statEntries;
         try {
@@ -375,21 +375,33 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
             return null;
         }
         if (statEntries == null) {
-            return null;
+            return shvr;
         }
 
-        final List<HistoricResourceValue> hrcs = new ArrayList<>();
         for (StatEntryDTO stat : statEntries) {
             final Instant timestamp = Instant.parse(stat.timestamp);
-            final Optional<StatLogEntryDTO> optLogEntry = stat.perRoute.stream().filter(
-                    sle -> Optional.ofNullable(sle.getRoute()).map(r -> service.equals(r.getId())).orElse(false))
-                    .findFirst();
-            hrcs.add(makeHistoricResourceValue(service, resource,
-                    optLogEntry.map(le -> le.getFieldByName(resource)).orElse(null), timestamp));
-        }
+            if (stat.perRoute == null || stat.totalCount == 0) {
+                continue;
+            }
 
-        final SingleHistoricValueResponse shvr = new SingleHistoricValueResponse();
-        shvr.values = hrcs;
+            shvr.values.addAll(stat.perRoute.stream().filter(le -> le.getRoute() != null)
+                    .flatMap(le -> Optional.ofNullable(le.toDto(new DtoMaker() {
+                        @Override
+                        public <T> GenericDto make(String rcName, T value, Class<T> type) {
+                            final GenericDto result = new GenericDto();
+                            result.timestamp = timestamp;
+                            result.provider = providerName;
+                            result.service = le.getRoute().getId();
+                            result.resource = rcName;
+                            result.value = value;
+                            result.type = type;
+                            return result;
+                        }
+                    })).map(List::stream).orElse(Stream.empty()))
+                    .filter(dto -> !fromTime.isAfter(dto.timestamp) && !toTime.isBefore(dto.timestamp))
+                    .map(dto -> makeHistoricResourceValue(dto.service, dto.resource, dto.value, dto.timestamp))
+                    .toList());
+        }
         return shvr;
     }
 }
