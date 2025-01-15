@@ -22,6 +22,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -129,6 +130,11 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
      * Keep track of known route IDs to tell the history provider and of their type
      */
     private Map<String, String> knownRouteIds = new HashMap<>();
+
+    /**
+     * Keep track of numeric resources
+     */
+    private Set<String> numericResources = new HashSet<>();
 
     @Activate
     void activate(final Configuration config) throws Exception {
@@ -252,8 +258,8 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
      */
     boolean updateCurrentValues() {
         try {
-            final List<StatEntryDTO> statEntries = loadStatEntries("all", OffsetDateTime.now(timeZone).minusDays(2),
-                    OffsetDateTime.now(timeZone), "hour");
+            final List<StatEntryDTO> statEntries = loadStatEntries("all", OffsetDateTime.now(timeZone).minusMonths(2),
+                    OffsetDateTime.now(timeZone), "day");
             if (statEntries == null) {
                 // No entries
                 return false;
@@ -294,6 +300,11 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
                                 result.type = type;
                                 result.nullAction = NullAction.UPDATE_IF_PRESENT;
                                 result.duplicateDataAction = DuplicateAction.UPDATE_ALWAYS;
+
+                                if (Number.class.isAssignableFrom(result.type)) {
+                                    numericResources.add(rcName);
+                                }
+
                                 return result;
                             }
                         }));
@@ -372,7 +383,7 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
                     OffsetDateTime.ofInstant(toTime, timeZone), "hour");
         } catch (Exception e) {
             logger.error("Error retrieving statistics for provider {} and route ID {}", provider, service, e);
-            return null;
+            return shvr;
         }
         if (statEntries == null) {
             return shvr;
@@ -384,24 +395,60 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
                 continue;
             }
 
-            shvr.values.addAll(stat.perRoute.stream().filter(le -> le.getRoute() != null)
-                    .flatMap(le -> Optional.ofNullable(le.toDto(new DtoMaker() {
-                        @Override
-                        public <T> GenericDto make(String rcName, T value, Class<T> type) {
-                            final GenericDto result = new GenericDto();
-                            result.timestamp = timestamp;
-                            result.provider = providerName;
-                            result.service = le.getRoute().getId();
-                            result.resource = rcName;
-                            result.value = value;
-                            result.type = type;
-                            return result;
-                        }
-                    })).map(List::stream).orElse(Stream.empty()))
-                    .filter(dto -> !fromTime.isAfter(dto.timestamp) && !toTime.isBefore(dto.timestamp))
-                    .map(dto -> makeHistoricResourceValue(dto.service, dto.resource, dto.value, dto.timestamp))
-                    .toList());
+            if (timestamp.isBefore(fromTime) || timestamp.isAfter(toTime)) {
+                continue;
+            }
+
+            final Set<String> viewedRoutes = new HashSet<>();
+            for (StatLogEntryDTO le : stat.perRoute) {
+                if (le.getRoute() == null) {
+                    continue;
+                }
+
+                List<GenericDto> leDtos = le.toDto(new DtoMaker() {
+                    @Override
+                    public <T> GenericDto make(String rcName, T value, Class<T> type) {
+                        final GenericDto result = new GenericDto();
+                        result.timestamp = timestamp;
+                        result.provider = providerName;
+                        result.service = le.getRoute().getId();
+                        result.resource = rcName;
+                        result.value = value;
+                        result.type = type;
+                        return result;
+                    }
+                });
+                if (leDtos != null) {
+                    viewedRoutes.add(le.getRoute().getId());
+                    shvr.values.addAll(leDtos.stream()
+                            .map(dto -> makeHistoricResourceValue(dto.service, dto.resource, dto.value, dto.timestamp))
+                            .toList());
+                }
+            }
+
+            final Map<String, List<String>> rcPerRouteType = knownRouteIds.values().stream().distinct()
+                    .collect(Collectors.toMap(Function.identity(), type -> StatLogEntryDTO.getResources(type).stream()
+                            .filter(numericResources::contains).toList()));
+            shvr.values
+                    .addAll(knownRouteIds
+                            .entrySet().stream().filter(
+                                    e -> !viewedRoutes.contains(e.getKey()))
+                            .flatMap(
+                                    e -> Optional
+                                            .ofNullable(
+                                                    rcPerRouteType.get(e.getValue()))
+                                            .map(rcList -> rcList.stream()
+                                                    .map(rcName -> makeHistoricResourceValue(e.getKey(), rcName, 0,
+                                                            timestamp)))
+                                            .orElse(Stream.empty()))
+                            .toList());
         }
+
+        if (shvr.values.isEmpty() && numericResources.contains(resource)) {
+            // No value means no results: consider 0 when talking about numerical values
+            shvr.values = List.of(makeHistoricResourceValue(service, resource, 0, fromTime));
+        }
+
         return shvr;
     }
 }
