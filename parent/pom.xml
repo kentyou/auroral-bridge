@@ -72,11 +72,18 @@
         <type>pom</type>
         <scope>import</scope>
       </dependency>
-      
+
       <dependency>
         <groupId>org.eclipse.sensinact.gateway.southbound.wot</groupId>
         <artifactId>wot-api</artifactId>
         <version>${sensinact.version}</version>
+      </dependency>
+
+      <!-- History provider -->
+      <dependency>
+        <groupId>com.kentyou.sensinact</groupId>
+        <artifactId>history.api</artifactId>
+        <version>${extras.version}</version>
       </dependency>
 
       <!-- Logging -->
