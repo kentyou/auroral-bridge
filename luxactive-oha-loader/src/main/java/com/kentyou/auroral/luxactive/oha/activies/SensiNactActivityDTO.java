@@ -118,16 +118,25 @@ public class SensiNactActivityDTO {
     public String channelName;
 
     /**
+     * Auroral property used to load this activity
+     */
+    @Service("auroral")
+    @Resource("property")
+    @Data
+    public String auroralProperty;
+
+    /**
      * Construct this bean from a loaded DTO
      *
+     * @param auroralProperty Auroral property used to load the activity description
      * @param modelPackageUri Model package URI
      * @param model           sensiNact model name
      * @param providerName    Name of the provider
      * @param description     Parsed description
      * @return A sensiNact update DTO
      */
-    public static SensiNactActivityDTO fromDTO(final String modelPackageUri, final String model,
-            final String providerName, final ActivityDescriptionDTO description) {
+    public static SensiNactActivityDTO fromDTO(final String auroralProperty, final String modelPackageUri,
+            final String model, final String providerName, final ActivityDescriptionDTO description) {
         final SensiNactActivityDTO dto = new SensiNactActivityDTO();
         if (modelPackageUri != null && !modelPackageUri.isBlank()) {
             dto.modelPackageUri = modelPackageUri;
@@ -143,6 +152,7 @@ public class SensiNactActivityDTO {
         dto.description = description.shortDescription;
         dto.longDescription = description.longDescription;
         dto.coverImage = description.coverImage;
+        dto.auroralProperty = auroralProperty;
 
         if (description.channel != null) {
             dto.channelId = description.channel.id;

@@ -100,7 +100,7 @@ public class ActivityLoader {
                 final List<ActivityDescriptionDTO> activities = loadDescriptions(nodeUrl, localOid, remoteOid,
                         property);
                 if (activities != null) {
-                    pushDescription(providerModelPackageUri, providerModel, providerNameFormat, activities);
+                    pushDescription(property, providerModelPackageUri, providerModel, providerNameFormat, activities);
                 }
             }
         });
@@ -150,20 +150,22 @@ public class ActivityLoader {
      * Pushes the descriptions of activities to sensiNact, with one provider per
      * activity
      *
+     * @param auroralProperty  Auroral property used to load the activity
+     *                         description
      * @param modelPackageUri  Activity provider model package URI
      * @param model            Activity provider model name
      * @param providerTemplate Template of activity provider name
      * @param activities       Activities to register
      */
-    void pushDescription(final String modelPackageUri, final String model, final String providerTemplate,
-            final List<ActivityDescriptionDTO> activities) {
+    void pushDescription(final String auroralProperty, final String modelPackageUri, final String model,
+            final String providerTemplate, final List<ActivityDescriptionDTO> activities) {
         if (activities == null || activities.isEmpty()) {
             logger.warn("No activities to push");
         }
 
         try {
-            push.pushUpdate(activities.stream().map(descr -> SensiNactActivityDTO.fromDTO(modelPackageUri, model,
-                    providerTemplate.formatted(descr.identifier), descr)).toList()).getValue();
+            push.pushUpdate(activities.stream().map(descr -> SensiNactActivityDTO.fromDTO(auroralProperty,
+                    modelPackageUri, model, providerTemplate.formatted(descr.identifier), descr)).toList()).getValue();
         } catch (InvocationTargetException | InterruptedException e) {
             logger.error("Error pushing activity description definition", e);
         }

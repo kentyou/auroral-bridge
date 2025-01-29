@@ -162,7 +162,7 @@ public class ActivityLoaderTest {
 
         loaderConfig = cm.createFactoryConfiguration("luxactive.oha.loader", "?");
         loaderConfig.update(new Hashtable<>(Map.of("provider.template", template, "auroral.node.url", baseUrl,
-                "oid.local", "123", "oid.remote", "456", "auroral.properties", "localData")));
+                "oid.local", "123", "oid.remote", "456", "auroral.properties", auroralProperty)));
         waitForProvider(targetProvider);
 
         // No argument must have been given
@@ -180,6 +180,7 @@ public class ActivityLoaderTest {
         // provided in the JSON file
         assertEquals(OffsetDateTime.of(2023, 6, 13, 10, 23, 03, 138000000, ZoneOffset.UTC).toInstant(),
                 ps.getResource("activity", "id").getValue().getTimestamp());
+        assertEquals(auroralProperty, ps.getResource("auroral", "property").getValue().getValue());
         assertEquals("d57b29de-a5ff-4f65-8b37-4467830749df", ps.getResource("activity", "id").getValue().getValue());
         assertEquals("Tore Hunds rolle i historien", ps.getResource("admin", "friendlyName").getValue().getValue());
         assertEquals(
