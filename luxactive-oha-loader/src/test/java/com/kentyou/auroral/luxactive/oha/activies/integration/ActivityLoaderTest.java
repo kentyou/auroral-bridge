@@ -157,7 +157,7 @@ public class ActivityLoaderTest {
         final String response = readFile("oha-activities-halogaland.json");
         handler.setHandler("/api/properties/" + oidLocal + "/" + oidRemote + "/" + auroralProperty, (t, a) -> {
             arguments.set(a);
-            return response;
+            return "{\"message\": %s, \"statusCode\": 200}".formatted(response);
         });
 
         loaderConfig = cm.createFactoryConfiguration("luxactive.oha.loader", "?");

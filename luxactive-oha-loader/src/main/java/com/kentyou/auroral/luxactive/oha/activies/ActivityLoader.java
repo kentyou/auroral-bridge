@@ -11,6 +11,7 @@ package com.kentyou.auroral.luxactive.oha.activies;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URI;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 import org.eclipse.jetty.client.HttpClient;
@@ -137,9 +138,11 @@ public class ActivityLoader {
                 return null;
             }
 
-            return mapper.readValue(response.getContentAsString(), new TypeReference<List<ActivityDescriptionDTO>>() {
+            Map<String, Object> jsonResponse = mapper.readValue(response.getContentAsString(),
+                    new TypeReference<Map<String, Object>>() {
+                    });
+            return mapper.convertValue(jsonResponse.get("message"), new TypeReference<List<ActivityDescriptionDTO>>() {
             });
-
         } catch (Exception e) {
             logger.error("Error querying URL {}", request.getURI(), e);
             return null;
