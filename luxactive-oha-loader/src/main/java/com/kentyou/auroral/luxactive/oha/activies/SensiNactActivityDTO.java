@@ -95,11 +95,25 @@ public class SensiNactActivityDTO {
     public String description;
 
     /**
+     * Activity description with HTML tags
+     */
+    @Service("activity")
+    @Data
+    public String htmlDescription;
+
+    /**
      * Activity long description
      */
     @Service("activity")
     @Data
     public String longDescription;
+
+    /**
+     * Activity long description with HTML tags
+     */
+    @Service("activity")
+    @Data
+    public String htmlLongDescription;
 
     /**
      * Activity cover image
@@ -131,6 +145,17 @@ public class SensiNactActivityDTO {
     public String auroralProperty;
 
     /**
+     * Removes HTML tags of the given text
+     *
+     * @param html HTML text
+     * @return The text without HTML tags
+     */
+    static String removeHtmlTags(final String html) {
+        return html.replace("<br>", "\n").replace("</p>", "\n").replaceAll("</?[^>]+>", "").replace("&nbsp;", " ")
+                .trim();
+    }
+
+    /**
      * Construct this bean from a loaded DTO
      *
      * @param auroralProperty Auroral property used to load the activity description
@@ -154,8 +179,10 @@ public class SensiNactActivityDTO {
         dto.id = description.identifier;
         dto.title = description.title;
         dto.language = description.language;
-        dto.description = description.shortDescription;
-        dto.longDescription = description.longDescription;
+        dto.htmlDescription = description.shortDescription;
+        dto.description = removeHtmlTags(description.shortDescription);
+        dto.htmlLongDescription = description.longDescription;
+        dto.longDescription = removeHtmlTags(description.longDescription);
         dto.coverImage = description.coverImage;
         dto.auroralProperty = auroralProperty;
 
