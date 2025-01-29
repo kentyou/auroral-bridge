@@ -161,7 +161,7 @@ public class ActivityLoaderTest {
         });
 
         loaderConfig = cm.createFactoryConfiguration("luxactive.oha.loader", "?");
-        loaderConfig.update(new Hashtable<>(Map.of("provider.template", template, "auroral.node.url", baseUrl,
+        loaderConfig.update(new Hashtable<>(Map.of("oha.provider.template", template, "auroral.node.url", baseUrl,
                 "oid.local", "123", "oid.remote", "456", "auroral.properties", auroralProperty)));
         waitForProvider(targetProvider);
 

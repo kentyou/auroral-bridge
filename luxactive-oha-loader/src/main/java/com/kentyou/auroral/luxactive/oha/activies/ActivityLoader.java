@@ -62,11 +62,11 @@ public class ActivityLoader {
      */
     @Activate
     void activate(final LoaderConfiguration config) throws Exception {
-        final String providerModelPackageUri = config.provider_model_package_uri();
-        final String providerModel = config.provider_model();
+        final String providerModelPackageUri = config.oha_provider_model_package_uri();
+        final String providerModel = config.oha_provider_model();
 
         final String providerNameFormat = Objects
-                .requireNonNull(config.provider_template(), "No provider template given").trim();
+                .requireNonNull(config.oha_provider_template(), "No provider template given").trim();
         if (providerNameFormat.isEmpty() || !providerNameFormat.contains("%s")) {
             throw new IllegalArgumentException("Provider template is invalid: '" + providerNameFormat + "'");
         }

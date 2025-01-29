@@ -13,17 +13,17 @@ public @interface LoaderConfiguration {
     /**
      * Template of the provider name, with a string entry for the activity ID
      */
-    String provider_template() default "oha-%s";
+    String oha_provider_template() default "oha-%s";
 
     /**
      * Provider model package URI
      */
-    String provider_model_package_uri();
+    String oha_provider_model_package_uri();
 
     /**
      * Provider model name
      */
-    String provider_model() default "oha-activity";
+    String oha_provider_model() default "oha-activity";
 
     /**
      * URL to the Auroral node to use (without the /api/ path)
