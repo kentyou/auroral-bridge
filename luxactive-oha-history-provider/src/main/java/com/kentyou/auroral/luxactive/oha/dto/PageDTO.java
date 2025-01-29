@@ -63,16 +63,16 @@ public class PageDTO extends AbstractRouteDTO {
     @Override
     public Object getFieldByName(String rcName) {
         switch (rcName) {
-            case RC_ID:
-                return this.id;
-            case RC_TITLE:
-                return this.title;
-            case RC_LANGUAGE:
-                return this.language;
-            case RC_PAGE_TYPE:
-                return this.type;
-            default:
-                return null;
+        case RC_ID:
+            return this.id;
+        case RC_TITLE:
+            return this.title;
+        case RC_LANGUAGE:
+            return this.language;
+        case RC_PAGE_TYPE:
+            return this.type;
+        default:
+            return null;
         }
     }
 }

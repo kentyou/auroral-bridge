@@ -63,16 +63,16 @@ public class ActivityDTO extends AbstractRouteDTO {
     @Override
     public Object getFieldByName(String rcName) {
         switch (rcName) {
-            case RC_ID:
-                return this.id;
-            case RC_TITLE:
-                return this.title;
-            case RC_IMAGE:
-                return this.image;
-            case RC_CHANNEL_ID:
-                return this.channelId;
-            default:
-                return null;
+        case RC_ID:
+            return this.id;
+        case RC_TITLE:
+            return this.title;
+        case RC_IMAGE:
+            return this.image;
+        case RC_CHANNEL_ID:
+            return this.channelId;
+        default:
+            return null;
         }
     }
 }
