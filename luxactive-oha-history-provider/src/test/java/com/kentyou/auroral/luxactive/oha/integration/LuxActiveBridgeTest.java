@@ -25,6 +25,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Hashtable;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -50,6 +51,8 @@ import org.osgi.util.promise.Promise;
 import org.osgi.util.promise.PromiseFactory;
 import org.osgi.util.tracker.ServiceTracker;
 
+import com.kentyou.auroral.luxactive.oha.LuxActiveHistoryProvider;
+import com.kentyou.sensinact.history.dto.single.HistoricResourceValue;
 import com.kentyou.sensinact.history.dto.single.SingleHistoricValueResponse;
 import com.kentyou.sensinact.history.spi.SimpleHistory;
 
@@ -181,61 +184,80 @@ public class LuxActiveBridgeTest {
     @Test
     void testCurrentValues() throws Exception {
         // Create a configuration for the oHA stats handler
-        final String ohaProviderName = "ohaProvider-current";
+        final String ohaProviderTemplate = "oha-history-test-%s";
         ohaConfig = cm.createFactoryConfiguration("luxactive.oha.statistics", "?");
-        ohaConfig.update(new Hashtable<>(Map.of("provider", ohaProviderName, "bridge.provider", auroralProviderName,
-                "bridge.action", "logHourlyByDateRange", "bridge.action.service", "svc", "oha.realm", "789")));
-        waitForProvider(ohaProviderName);
+        ohaConfig.update(new Hashtable<>(
+                Map.of("oha.provider.template", ohaProviderTemplate, "bridge.provider", auroralProviderName,
+                        "bridge.action", "logHourlyByDateRange", "bridge.action.service", "svc", "oha.realm", "789")));
+
+        final AtomicReference<String> ohaProviderName = new AtomicReference<String>(
+                ohaProviderTemplate.formatted("31b45057-b469-4483-b05a-1de81e8483ed"));
+        waitForProvider(ohaProviderName.get());
 
         // Check its values
-        final ProviderSnapshot ps = thread.execute(new AbstractTwinCommand<ProviderSnapshot>() {
+        ProviderSnapshot ps = thread.execute(new AbstractTwinCommand<ProviderSnapshot>() {
             @Override
             protected Promise<ProviderSnapshot> call(SensinactDigitalTwin twin, PromiseFactory pf) {
-                return pf.resolved(twin.snapshotProvider(ohaProviderName));
+                return pf.resolved(twin.snapshotProvider(ohaProviderName.get()));
             }
         }).getValue();
 
         assertEquals(OffsetDateTime.of(2024, 5, 2, 0, 0, 0, 0, ZoneOffset.UTC).toInstant(),
-                ps.getResource("31b45057-b469-4483-b05a-1de81e8483ed", "totalRetentionTime").getValue().getTimestamp());
+                ps.getResource(LuxActiveHistoryProvider.STATS_SERVICE, "totalRetentionTime").getValue().getTimestamp());
         assertEquals(9d,
-                ps.getResource("31b45057-b469-4483-b05a-1de81e8483ed", "totalRetentionTime").getValue().getValue());
+                ps.getResource(LuxActiveHistoryProvider.STATS_SERVICE, "totalRetentionTime").getValue().getValue());
         assertEquals(9d,
-                ps.getResource("31b45057-b469-4483-b05a-1de81e8483ed", "averageRetentionTime").getValue().getValue());
-        assertEquals(1, ps.getResource("31b45057-b469-4483-b05a-1de81e8483ed", "logCount").getValue().getValue());
+                ps.getResource(LuxActiveHistoryProvider.STATS_SERVICE, "averageRetentionTime").getValue().getValue());
+        assertEquals(1, ps.getResource(LuxActiveHistoryProvider.STATS_SERVICE, "logCount").getValue().getValue());
         assertEquals("31b45057-b469-4483-b05a-1de81e8483ed",
-                ps.getResource("31b45057-b469-4483-b05a-1de81e8483ed", "id").getValue().getValue());
+                ps.getResource(LuxActiveHistoryProvider.STATS_SERVICE, "id").getValue().getValue());
         assertEquals("https://asset.myoha.at/file/abc31200-c1a0-4f75-b64f-5cda5ac4f438.png",
-                ps.getResource("31b45057-b469-4483-b05a-1de81e8483ed", "image").getValue().getValue());
+                ps.getResource(LuxActiveHistoryProvider.STATS_SERVICE, "image").getValue().getValue());
         assertEquals("Emil Magdić - Tidligere fange i Beisfjord",
-                ps.getResource("31b45057-b469-4483-b05a-1de81e8483ed", "title").getValue().getValue());
+                ps.getResource(LuxActiveHistoryProvider.STATS_SERVICE, "title").getValue().getValue());
         assertEquals("6d4e5a5f-7562-498c-a503-b98af7dfd3ae",
-                ps.getResource("31b45057-b469-4483-b05a-1de81e8483ed", "channelId").getValue().getValue());
+                ps.getResource(LuxActiveHistoryProvider.STATS_SERVICE, "channelId").getValue().getValue());
+
+        // Check another one
+        ohaProviderName.set(ohaProviderTemplate.formatted("91a9876e-4b45-46f8-a6ef-9e65c82c9d81"));
+
+        // Check its values
+        ps = thread.execute(new AbstractTwinCommand<ProviderSnapshot>() {
+            @Override
+            protected Promise<ProviderSnapshot> call(SensinactDigitalTwin twin, PromiseFactory pf) {
+                return pf.resolved(twin.snapshotProvider(ohaProviderName.get()));
+            }
+        }).getValue();
 
         assertEquals(OffsetDateTime.of(2024, 5, 1, 0, 0, 0, 0, ZoneOffset.UTC).toInstant(),
-                ps.getResource("91a9876e-4b45-46f8-a6ef-9e65c82c9d81", "totalRetentionTime").getValue().getTimestamp());
+                ps.getResource(LuxActiveHistoryProvider.STATS_SERVICE, "totalRetentionTime").getValue().getTimestamp());
         assertEquals(9d,
-                ps.getResource("91a9876e-4b45-46f8-a6ef-9e65c82c9d81", "totalRetentionTime").getValue().getValue());
+                ps.getResource(LuxActiveHistoryProvider.STATS_SERVICE, "totalRetentionTime").getValue().getValue());
         assertEquals(9d,
-                ps.getResource("91a9876e-4b45-46f8-a6ef-9e65c82c9d81", "averageRetentionTime").getValue().getValue());
-        assertEquals(1, ps.getResource("91a9876e-4b45-46f8-a6ef-9e65c82c9d81", "logCount").getValue().getValue());
+                ps.getResource(LuxActiveHistoryProvider.STATS_SERVICE, "averageRetentionTime").getValue().getValue());
+        assertEquals(1, ps.getResource(LuxActiveHistoryProvider.STATS_SERVICE, "logCount").getValue().getValue());
         assertEquals("91a9876e-4b45-46f8-a6ef-9e65c82c9d81",
-                ps.getResource("91a9876e-4b45-46f8-a6ef-9e65c82c9d81", "id").getValue().getValue());
+                ps.getResource(LuxActiveHistoryProvider.STATS_SERVICE, "id").getValue().getValue());
         assertEquals("https://asset.myoha.at/file/0536f0b1-ce6e-4096-add1-2e179ef84c16.png",
-                ps.getResource("91a9876e-4b45-46f8-a6ef-9e65c82c9d81", "image").getValue().getValue());
+                ps.getResource(LuxActiveHistoryProvider.STATS_SERVICE, "image").getValue().getValue());
         assertEquals("Slavko Vukić – Tidligere fange i Beisfjord",
-                ps.getResource("91a9876e-4b45-46f8-a6ef-9e65c82c9d81", "title").getValue().getValue());
+                ps.getResource(LuxActiveHistoryProvider.STATS_SERVICE, "title").getValue().getValue());
         assertEquals("6d4e5a5f-7562-498c-a503-b98af7dfd3ae",
-                ps.getResource("91a9876e-4b45-46f8-a6ef-9e65c82c9d81", "channelId").getValue().getValue());
+                ps.getResource(LuxActiveHistoryProvider.STATS_SERVICE, "channelId").getValue().getValue());
     }
 
     @Test
     void testHistory() throws Exception {
         // Create a configuration for the oHA stats handler
-        final String ohaProviderName = "ohaProvider-history";
+        final String ohaProviderTemplate = "oha-history-test-%s";
         ohaConfig = cm.createFactoryConfiguration("luxactive.oha.statistics", "?");
-        ohaConfig.update(new Hashtable<>(Map.of("provider", ohaProviderName, "bridge.provider", auroralProviderName,
-                "bridge.action", "logHourlyByDateRange", "bridge.action.service", "svc", "oha.realm", "789")));
-        waitForProvider(ohaProviderName);
+        ohaConfig.update(new Hashtable<>(
+                Map.of("oha.provider.template", ohaProviderTemplate, "bridge.provider", auroralProviderName,
+                        "bridge.action", "logHourlyByDateRange", "bridge.action.service", "svc", "oha.realm", "789")));
+
+        final AtomicReference<String> ohaProviderName = new AtomicReference<String>(
+                ohaProviderTemplate.formatted("31b45057-b469-4483-b05a-1de81e8483ed"));
+        waitForProvider(ohaProviderName.get());
 
         ServiceTracker<SimpleHistory, SimpleHistory> tracker = new ServiceTracker<>(ctx, SimpleHistory.class, null);
         tracker.open();
@@ -249,8 +271,8 @@ public class LuxActiveBridgeTest {
 
         // Note: the payload sent back by the test server will always be the same
         arguments.set(null);
-        SingleHistoricValueResponse history = historyApi.getValueRange(ohaProviderName,
-                "31b45057-b469-4483-b05a-1de81e8483ed", "totalRetentionTime", fromTime, toTime);
+        SingleHistoricValueResponse history = historyApi.getValueRange(ohaProviderName.get(),
+                LuxActiveHistoryProvider.STATS_SERVICE, "totalRetentionTime", fromTime, toTime);
 
         Map<String, String> args = arguments.getAndSet(null);
         assertNotNull(args);
@@ -259,13 +281,18 @@ public class LuxActiveBridgeTest {
         assertEquals("2024-05-01Z", args.get("date_from"));
         assertEquals("2024-05-02Z", args.get("date_to"));
         assertEquals("hour", args.get("aggregation_window"));
-        assertEquals(2, history.values.size());
-        assertEquals(18d, history.values.get(0).dto.getValue());
-        assertEquals(9d, history.values.get(1).dto.getValue());
+        assertEquals(47, history.values.size());
+
+        List<HistoricResourceValue> rcs = history.values.stream()
+                .filter(hrv -> ohaProviderName.get().equals(hrv.provider))
+                .filter(hrv -> "totalRetentionTime".equals(hrv.resource)).toList();
+        assertEquals(2, rcs.size());
+        assertEquals(18d, rcs.get(0).dto.getValue());
+        assertEquals(9d, rcs.get(1).dto.getValue());
 
         fromTime = Instant.parse("2024-05-01T00:00:00Z");
         toTime = Instant.parse("2024-05-01T12:00:00Z");
-        history = historyApi.getValueRange(ohaProviderName, "31b45057-b469-4483-b05a-1de81e8483ed",
+        history = historyApi.getValueRange(ohaProviderName.get(), LuxActiveHistoryProvider.STATS_SERVICE,
                 "totalRetentionTime", fromTime, toTime);
 
         args = arguments.getAndSet(null);
@@ -280,12 +307,15 @@ public class LuxActiveBridgeTest {
     @Test
     void testTimezone() throws Exception {
         // Create a configuration for the oHA stats handler
-        final String ohaProviderName = "ohaProvider-tz";
+        final String ohaProviderTemplate = "oha-history-tz-%s";
         ohaConfig = cm.createFactoryConfiguration("luxactive.oha.statistics", "?");
-        ohaConfig.update(new Hashtable<>(Map.of("provider", ohaProviderName, "bridge.provider", auroralProviderName,
-                "bridge.action", "logHourlyByDateRange", "bridge.action.service", "svc", "oha.realm", "789",
-                "oha.timezone", "Europe/Oslo")));
-        waitForProvider(ohaProviderName);
+        ohaConfig.update(new Hashtable<>(Map.of("oha.provider.template", ohaProviderTemplate, "bridge.provider",
+                auroralProviderName, "bridge.action", "logHourlyByDateRange", "bridge.action.service", "svc",
+                "oha.realm", "789", "oha.timezone", "Europe/Oslo")));
+
+        final AtomicReference<String> ohaProviderName = new AtomicReference<String>(
+                ohaProviderTemplate.formatted("31b45057-b469-4483-b05a-1de81e8483ed"));
+        waitForProvider(ohaProviderName.get());
 
         ServiceTracker<SimpleHistory, SimpleHistory> tracker = new ServiceTracker<>(ctx, SimpleHistory.class, null);
         tracker.open();
@@ -299,8 +329,8 @@ public class LuxActiveBridgeTest {
 
         // Note: the payload sent back by the test server will always be the same
         arguments.set(null);
-        SingleHistoricValueResponse history = historyApi.getValueRange(ohaProviderName,
-                "31b45057-b469-4483-b05a-1de81e8483ed", "totalRetentionTime", fromTime, toTime);
+        SingleHistoricValueResponse history = historyApi.getValueRange(ohaProviderName.get(),
+                LuxActiveHistoryProvider.STATS_SERVICE, "totalRetentionTime", fromTime, toTime);
 
         Map<String, String> args = arguments.getAndSet(null);
         assertNotNull(args);
@@ -309,13 +339,18 @@ public class LuxActiveBridgeTest {
         assertEquals("2024-05-01+02:00", args.get("date_from"));
         assertEquals("2024-05-02+02:00", args.get("date_to"));
         assertEquals("hour", args.get("aggregation_window"));
-        assertEquals(2, history.values.size());
-        assertEquals(18d, history.values.get(0).dto.getValue());
-        assertEquals(9d, history.values.get(1).dto.getValue());
+        assertEquals(47, history.values.size());
+
+        List<HistoricResourceValue> rcs = history.values.stream()
+                .filter(hrv -> ohaProviderName.get().equals(hrv.provider))
+                .filter(hrv -> "totalRetentionTime".equals(hrv.resource)).toList();
+        assertEquals(2, rcs.size());
+        assertEquals(18d, rcs.get(0).dto.getValue());
+        assertEquals(9d, rcs.get(1).dto.getValue());
 
         fromTime = Instant.parse("2024-05-01T00:00:00Z");
         toTime = Instant.parse("2024-05-01T12:00:00Z");
-        history = historyApi.getValueRange(ohaProviderName, "31b45057-b469-4483-b05a-1de81e8483ed",
+        history = historyApi.getValueRange(ohaProviderName.get(), LuxActiveHistoryProvider.STATS_SERVICE,
                 "totalRetentionTime", fromTime, toTime);
 
         args = arguments.getAndSet(null);

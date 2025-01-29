@@ -11,36 +11,27 @@
 *   Thomas Calmant (Kentyou) - Initial contribution
 **********************************************************************/
 
-package com.kentyou.auroral.luxactive.oha;
+package com.kentyou.auroral.luxactive.oha.activies.dto;
 
-public @interface Configuration {
-    /**
-     * Provider name
-     */
-    String provider();
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+public class LocationDTO {
 
     /**
-     * Name of the Auroral Explicit bridge provider
+     * Latitude
      */
-    String bridge_provider();
+    @JsonProperty("lat")
+    public Double latitude;
 
     /**
-     * Bridge action name
+     * Longitude
      */
-    String bridge_action();
+    @JsonProperty("long")
+    public Double longitude;
 
     /**
-     * Bridge action service name
+     * Altitude (can be null)
      */
-    String bridge_action_service() default "auroral";
-
-    /**
-     * oHA Realm ID
-     */
-    String oha_realm();
-
-    /**
-     * Time zone for the oHA realm
-     */
-    String oha_timezone() default "UTC";
+    @JsonProperty("alt")
+    public Double altitude;
 }

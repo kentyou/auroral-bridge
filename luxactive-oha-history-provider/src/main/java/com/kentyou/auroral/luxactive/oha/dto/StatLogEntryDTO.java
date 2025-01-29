@@ -110,17 +110,17 @@ public class StatLogEntryDTO {
         }
 
         switch (routeType) {
-            case "activity":
-                return activity;
+        case "activity":
+            return activity;
 
-            case "article":
-                return article;
+        case "article":
+            return article;
 
-            case "page":
-                return page;
+        case "page":
+            return page;
 
-            default:
-                return null;
+        default:
+            return null;
         }
     }
 
@@ -131,20 +131,20 @@ public class StatLogEntryDTO {
 
         final String[] routeResources;
         switch (routeType) {
-            case "activity":
-                routeResources = ActivityDTO.RESOURCES;
-                break;
+        case "activity":
+            routeResources = ActivityDTO.RESOURCES;
+            break;
 
-            case "article":
-                routeResources = ArticleDTO.RESOURCES;
-                break;
+        case "article":
+            routeResources = ArticleDTO.RESOURCES;
+            break;
 
-            case "page":
-                routeResources = PageDTO.RESOURCES;
-                break;
+        case "page":
+            routeResources = PageDTO.RESOURCES;
+            break;
 
-            default:
-                return Arrays.asList(RESOURCES);
+        default:
+            return Arrays.asList(RESOURCES);
         }
 
         return List.of(RESOURCES, routeResources).stream().flatMap(arr -> Arrays.stream(arr)).toList();
@@ -156,26 +156,26 @@ public class StatLogEntryDTO {
         }
 
         switch (rcName) {
-            case RC_TYPE:
-                return this.routeType;
-            case RC_RANK:
-                return this.rank;
-            case RC_TOTAL_RETENTION_TIME:
-                return this.totalRetentionTime;
-            case RC_AVERAGE_RETENTION_TIME:
-                return this.averageRetentionTime;
-            case RC_LOG_COUNT:
-                return this.count;
-            case RC_DEVICE_COUNT:
-                return this.deviceCount;
-            case RC_SESSION_COUNT:
-                return this.sessionCount;
-            case RC_QRCODE_COUNT:
-                return this.sourceQrCodeCount;
-            case RC_QRCODE_COUNT_PER_MILLE:
-                return this.sourceQrCodeCountPerMille;
-            default:
-                return Optional.ofNullable(getRoute()).map(r -> r.getFieldByName(rcName)).orElse(null);
+        case RC_TYPE:
+            return this.routeType;
+        case RC_RANK:
+            return this.rank;
+        case RC_TOTAL_RETENTION_TIME:
+            return this.totalRetentionTime;
+        case RC_AVERAGE_RETENTION_TIME:
+            return this.averageRetentionTime;
+        case RC_LOG_COUNT:
+            return this.count;
+        case RC_DEVICE_COUNT:
+            return this.deviceCount;
+        case RC_SESSION_COUNT:
+            return this.sessionCount;
+        case RC_QRCODE_COUNT:
+            return this.sourceQrCodeCount;
+        case RC_QRCODE_COUNT_PER_MILLE:
+            return this.sourceQrCodeCountPerMille;
+        default:
+            return Optional.ofNullable(getRoute()).map(r -> r.getFieldByName(rcName)).orElse(null);
         }
     }
 }

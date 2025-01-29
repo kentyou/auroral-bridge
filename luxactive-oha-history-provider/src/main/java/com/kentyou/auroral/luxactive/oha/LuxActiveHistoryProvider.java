@@ -72,7 +72,12 @@ import com.kentyou.sensinact.history.spi.SimpleHistory;
 @Component(immediate = true, configurationPid = "luxactive.oha.statistics", configurationPolicy = ConfigurationPolicy.REQUIRE)
 public class LuxActiveHistoryProvider implements SimpleHistory {
 
-    private final static Logger logger = LoggerFactory.getLogger(LuxActiveHistoryProvider.class);
+    private static final Logger logger = LoggerFactory.getLogger(LuxActiveHistoryProvider.class);
+
+    /**
+     * Statistics service name
+     */
+    public static final String STATS_SERVICE = "stats";
 
     /**
      * Gateway thread
@@ -97,11 +102,6 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
     private ScheduledExecutorService scheduler;
 
     /**
-     * History provider name
-     */
-    private String providerName;
-
-    /**
      * Auroral explicit bridge
      */
     private String bridgeProvider;
@@ -122,6 +122,21 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
     private String realmId;
 
     /**
+     * oHA provider model package URI
+     */
+    private String modelPackageUri;
+
+    /**
+     * oHA provider model name
+     */
+    private String model;
+
+    /**
+     * Template used to generate the oHA providers names based on their ID
+     */
+    private String providerTemplate;
+
+    /**
      * Time offset for each queries
      */
     private ZoneId timeZone;
@@ -129,7 +144,7 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
     /**
      * Keep track of known route IDs to tell the history provider and of their type
      */
-    private Map<String, String> knownRouteIds = new HashMap<>();
+    private Map<String, String> knownProviders = new HashMap<>();
 
     /**
      * Keep track of numeric resources
@@ -137,11 +152,13 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
     private Set<String> numericResources = new HashSet<>();
 
     @Activate
-    void activate(final Configuration config) throws Exception {
-        providerName = config.provider();
-        if (providerName == null || providerName.isBlank()) {
-            logger.error("Provider name not set");
-            throw new IllegalArgumentException("Provider name not set");
+    void activate(final HistoryProviderConfiguration config) throws Exception {
+        model = config.oha_provider_model();
+        modelPackageUri = config.oha_provider_model_package_uri();
+        providerTemplate = config.oha_provider_template();
+        if (providerTemplate == null || !providerTemplate.contains("%s")) {
+            logger.error("Invalid provider template: {}", providerTemplate);
+            throw new IllegalArgumentException("Invalid provider template");
         }
 
         bridgeProvider = config.bridge_provider();
@@ -284,6 +301,8 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
                         continue;
                     }
 
+                    final String providerName = providerTemplate.formatted(routeDto.getId());
+
                     final List<GenericDto> currentDtos = latestDetails.get(routeDto.getId());
                     if (currentDtos == null || currentDtos.isEmpty()
                             || currentDtos.get(0).timestamp.isBefore(timestamp)) {
@@ -293,8 +312,10 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
                             public <T> GenericDto make(String rcName, T value, Class<T> type) {
                                 final GenericDto result = new GenericDto();
                                 result.timestamp = timestamp;
+                                result.modelPackageUri = modelPackageUri;
+                                result.model = model;
                                 result.provider = providerName;
-                                result.service = routeDto.getId();
+                                result.service = STATS_SERVICE;
                                 result.resource = rcName;
                                 result.value = value;
                                 result.type = type;
@@ -309,7 +330,7 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
                             }
                         }));
 
-                        knownRouteIds.put(routeDto.getId(), routeDto.getType());
+                        knownProviders.put(providerName, routeDto.getType());
                     }
                 }
             }
@@ -329,33 +350,33 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
 
     @Override
     public Set<ResourcePath> getProvidedPaths() {
-        final Map<String, List<String>> rcPerRouteType = knownRouteIds.values().stream().distinct()
+        final Map<String, List<String>> rcPerRouteType = knownProviders.values().stream().distinct()
                 .collect(Collectors.toMap(Function.identity(), StatLogEntryDTO::getResources));
 
-        return knownRouteIds.entrySet().stream().flatMap(e -> {
-            final String routeId = e.getKey();
+        return knownProviders.entrySet().stream().flatMap(e -> {
+            final String providerName = e.getKey();
             final List<String> rcs = rcPerRouteType.get(e.getValue());
             if (rcs == null || rcs.isEmpty()) {
                 return Stream.empty();
             }
-            return rcs.stream().map(rcName -> new ResourcePath(providerName, providerName, routeId, rcName));
+            return rcs.stream().map(rcName -> new ResourcePath(model, providerName, STATS_SERVICE, rcName));
         }).collect(Collectors.toSet());
     }
 
     /**
      * Prepare an historic resource value bean
      *
-     * @param routeId   oHA route ID
-     * @param rcName    Resource (sensiNact) name
-     * @param value     Historic value
-     * @param timestamp Value time stamp
+     * @param providerName oHA provider name
+     * @param rcName       Resource (sensiNact) name
+     * @param value        Historic value
+     * @param timestamp    Value time stamp
      * @return An historic resource value bean
      */
-    private HistoricResourceValue makeHistoricResourceValue(final String routeId, final String rcName,
+    private HistoricResourceValue makeHistoricResourceValue(final String providerName, final String rcName,
             final Object value, final Instant timestamp) {
         final HistoricResourceValue hrv = new HistoricResourceValue();
         hrv.provider = providerName;
-        hrv.service = routeId;
+        hrv.service = STATS_SERVICE;
         hrv.resource = rcName;
         hrv.dto = new TimedValue<Object>() {
             @Override
@@ -405,13 +426,17 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
                     continue;
                 }
 
+                final String providerName = providerTemplate.formatted(le.getRoute().getId());
+
                 List<GenericDto> leDtos = le.toDto(new DtoMaker() {
                     @Override
                     public <T> GenericDto make(String rcName, T value, Class<T> type) {
                         final GenericDto result = new GenericDto();
                         result.timestamp = timestamp;
+                        result.modelPackageUri = modelPackageUri;
+                        result.model = model;
                         result.provider = providerName;
-                        result.service = le.getRoute().getId();
+                        result.service = STATS_SERVICE;
                         result.resource = rcName;
                         result.value = value;
                         result.type = type;
@@ -419,18 +444,18 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
                     }
                 });
                 if (leDtos != null) {
-                    viewedRoutes.add(le.getRoute().getId());
+                    viewedRoutes.add(providerName);
                     shvr.values.addAll(leDtos.stream()
-                            .map(dto -> makeHistoricResourceValue(dto.service, dto.resource, dto.value, dto.timestamp))
+                            .map(dto -> makeHistoricResourceValue(dto.provider, dto.resource, dto.value, dto.timestamp))
                             .toList());
                 }
             }
 
-            final Map<String, List<String>> rcPerRouteType = knownRouteIds.values().stream().distinct()
+            final Map<String, List<String>> rcPerRouteType = knownProviders.values().stream().distinct()
                     .collect(Collectors.toMap(Function.identity(), type -> StatLogEntryDTO.getResources(type).stream()
                             .filter(numericResources::contains).toList()));
             shvr.values
-                    .addAll(knownRouteIds
+                    .addAll(knownProviders
                             .entrySet().stream().filter(
                                     e -> !viewedRoutes.contains(e.getKey()))
                             .flatMap(
@@ -446,7 +471,7 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
 
         if (shvr.values.isEmpty() && numericResources.contains(resource)) {
             // No value means no results: consider 0 when talking about numerical values
-            shvr.values = List.of(makeHistoricResourceValue(service, resource, 0, fromTime));
+            shvr.values = List.of(makeHistoricResourceValue(provider, resource, 0, fromTime));
         }
 
         return shvr;
