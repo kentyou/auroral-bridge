@@ -13,12 +13,7 @@
 
 package com.kentyou.auroral.luxactive.oha;
 
-public @interface Configuration {
-    /**
-     * Provider name
-     */
-    String provider();
-
+public @interface HistoryProviderConfiguration {
     /**
      * Name of the Auroral Explicit bridge provider
      */
@@ -38,6 +33,22 @@ public @interface Configuration {
      * oHA Realm ID
      */
     String oha_realm();
+
+    /**
+     * oHA provider model package URI
+     */
+    String oha_provider_model_package_uri();
+
+    /**
+     * oHA provider model name
+     */
+    String oha_provider_model() default "oha-activity";
+
+    /**
+     * Template used to generate the oHA providers names based on their ID (must
+     * contain a single "%s")
+     */
+    String oha_provider_template();
 
     /**
      * Time zone for the oHA realm
