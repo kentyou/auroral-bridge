@@ -22,6 +22,8 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
 
+import org.eclipse.jetty.client.api.AuthenticationStore;
+import org.eclipse.jetty.client.util.BasicAuthentication;
 import org.eclipse.sensinact.core.command.AbstractSensinactCommand;
 import org.eclipse.sensinact.core.command.AbstractTwinCommand;
 import org.eclipse.sensinact.core.command.GatewayThread;
@@ -133,6 +135,14 @@ public class AuroralExplicitBridge {
         } else {
             configActions = mapper.readValue(config.actions(), new TypeReference<Map<String, ActionDTO>>() {
             });
+        }
+
+        final String userAuth = config.auroral_node_basic_user();
+        final String userPass = config.auroral_node_basic_password();
+        if (userAuth != null && !userAuth.isBlank() && userPass != null && !userPass.isBlank()) {
+            logger.debug("Using given credentials to access Auroral node");
+            final AuthenticationStore store = httpClient.getClient().getAuthenticationStore();
+            store.addAuthenticationResult(new BasicAuthentication.BasicResult(nodeUrl, userAuth, userPass));
         }
 
         // Convert actions

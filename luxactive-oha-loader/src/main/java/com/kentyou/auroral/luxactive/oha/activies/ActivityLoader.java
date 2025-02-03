@@ -24,8 +24,10 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import org.eclipse.jetty.client.HttpClient;
+import org.eclipse.jetty.client.api.AuthenticationStore;
 import org.eclipse.jetty.client.api.ContentResponse;
 import org.eclipse.jetty.client.api.Request;
+import org.eclipse.jetty.client.util.BasicAuthentication;
 import org.eclipse.sensinact.core.push.DataUpdate;
 import org.osgi.service.component.annotations.Activate;
 import org.osgi.service.component.annotations.Component;
@@ -108,6 +110,14 @@ public class ActivityLoader {
 
         httpClient = new HttpClient();
         httpClient.start();
+
+        final String userAuth = config.auroral_node_basic_user();
+        final String userPass = config.auroral_node_basic_password();
+        if (userAuth != null && !userAuth.isBlank() && userPass != null && !userPass.isBlank()) {
+            logger.debug("Using given credentials to access Auroral node");
+            final AuthenticationStore store = httpClient.getAuthenticationStore();
+            store.addAuthenticationResult(new BasicAuthentication.BasicResult(nodeUrl, userAuth, userPass));
+        }
 
         scheduler = new ScheduledThreadPoolExecutor(1);
         scheduler.scheduleAtFixedRate(() -> tryLoadingDescription(nodeUrl, localOid, remoteOid, properties,

@@ -28,8 +28,11 @@ import java.util.Hashtable;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.eclipse.jetty.security.HashLoginService;
+import org.eclipse.jetty.security.UserStore;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
+import org.eclipse.jetty.util.security.Password;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
 import org.eclipse.sensinact.core.command.AbstractTwinCommand;
 import org.eclipse.sensinact.core.command.GatewayThread;
@@ -212,5 +215,56 @@ public class ActivityLoaderTest {
         assertEquals(68.41728, location.coordinates.latitude, 0.000001);
         assertEquals(17.90582, location.coordinates.longitude, 0.000001);
         assertTrue(Double.isNaN(location.coordinates.elevation));
+    }
+
+    @Test
+    void testBasicAuth() throws Exception {
+        final String userName = "testUser";
+        final String password = "testPass";
+
+        final UserStore userStore = new UserStore();
+        userStore.addUser(userName, new Password(password), null);
+
+        final HashLoginService authBean = new HashLoginService();
+        authBean.setUserStore(userStore);
+
+        try {
+            server.addBean(authBean);
+
+            // Create a configuration for the oHA activity loader
+            final String baseUrl = "http://localhost:" + httpPort;
+            final String template = "test-oha-auth-%s";
+            final String targetProvider = template.formatted("d57b29de-a5ff-4f65-8b37-4467830749df");
+
+            // Prepare the HTTP server
+            final String oidLocal = "123";
+            final String oidRemote = "456";
+            final String auroralProperty = "localData";
+            final String response = readFile("oha-activities-halogaland.json");
+            handler.setHandler("/api/properties/" + oidLocal + "/" + oidRemote + "/" + auroralProperty, (t, a) -> {
+                arguments.set(a);
+                return "{\"message\": %s, \"statusCode\": 200}".formatted(response);
+            });
+
+            loaderConfig = cm.createFactoryConfiguration("luxactive.oha.loader", "?");
+            loaderConfig.update(new Hashtable<>(Map.of("oha.provider.template", template, "auroral.node.url", baseUrl,
+                    "auroral.node.basic.user", userName, "auroral.node.basic.password", password, "oid.local", "123",
+                    "oid.remote", "456", "auroral.properties", auroralProperty)));
+            waitForProvider(targetProvider);
+
+            // No argument must have been given
+            assertTrue(arguments.get().isEmpty());
+
+            // Check if its there
+            final ProviderSnapshot ps = thread.execute(new AbstractTwinCommand<ProviderSnapshot>() {
+                @Override
+                protected Promise<ProviderSnapshot> call(SensinactDigitalTwin twin, PromiseFactory pf) {
+                    return pf.resolved(twin.snapshotProvider(targetProvider));
+                }
+            }).getValue();
+            assertNotNull(ps);
+        } finally {
+            server.removeBean(authBean);
+        }
     }
 }
