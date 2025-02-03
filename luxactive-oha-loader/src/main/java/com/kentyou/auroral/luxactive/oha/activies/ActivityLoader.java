@@ -18,6 +18,10 @@ import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.ContentResponse;
@@ -59,9 +63,14 @@ public class ActivityLoader {
     HttpClient httpClient;
 
     /**
-     * Loading thread
+     * Scheduled retrials
      */
-    Thread loadingThread;
+    private ScheduledExecutorService scheduler;
+
+    /**
+     * Scheduled update task
+     */
+    private ScheduledFuture<?> scheduledUpdate;
 
     /**
      * Component activated
@@ -100,24 +109,63 @@ public class ActivityLoader {
         httpClient = new HttpClient();
         httpClient.start();
 
-        // Start queries in a new thread
-        loadingThread = new Thread(() -> {
-            for (String property : properties) {
-                final List<ActivityDescriptionDTO> activities = loadDescriptions(nodeUrl, localOid, remoteOid,
-                        property);
-                if (activities != null) {
-                    pushDescription(property, providerModelPackageUri, providerModel, providerNameFormat, activities);
-                }
-            }
-        });
-        loadingThread.start();
+        scheduler = new ScheduledThreadPoolExecutor(1);
+        scheduler.scheduleAtFixedRate(() -> tryLoadingDescription(nodeUrl, localOid, remoteOid, properties,
+                providerModelPackageUri, providerModel, providerNameFormat), 0, 6, TimeUnit.HOURS);
     }
 
     @Deactivate
     void deactivate() throws Exception {
+        if (scheduledUpdate != null) {
+            scheduledUpdate.cancel(true);
+            scheduledUpdate = null;
+        }
+
+        if (scheduler != null) {
+            scheduler.shutdownNow();
+            scheduler = null;
+        }
+
         if (httpClient != null) {
             httpClient.stop();
             httpClient = null;
+        }
+    }
+
+    /**
+     * Tries loading descriptions of activities. Automatically schedules a new call
+     * in 5 minutes if something fails
+     *
+     * @param nodeUrl                 Auroral node URL
+     * @param localOid                Local Auroral object ID
+     * @param remoteOid               Remote Auroral object ID
+     * @param properties              Auroral roperties to load from
+     * @param providerModelPackageUri Activity providers model package URI
+     * @param providerModel           Activity providers model names
+     * @param providerNameFormat      Template of the activity provider name
+     */
+    void tryLoadingDescription(final URI nodeUrl, final String localOid, final String remoteOid,
+            final String[] properties, final String providerModelPackageUri, final String providerModel,
+            final String providerNameFormat) {
+
+        if (scheduledUpdate != null) {
+            logger.debug("Unregister pending/running update task");
+            scheduledUpdate.cancel(false);
+            scheduledUpdate = null;
+        }
+
+        for (String property : properties) {
+            final List<ActivityDescriptionDTO> activities = loadDescriptions(nodeUrl, localOid, remoteOid, property);
+            if (activities != null) {
+                pushDescription(property, providerModelPackageUri, providerModel, providerNameFormat, activities);
+            } else if (scheduledUpdate == null) {
+                logger.debug("Schedule another update in 5 minutes");
+                scheduledUpdate = scheduler
+                        .schedule(
+                                () -> tryLoadingDescription(nodeUrl, localOid, remoteOid, properties,
+                                        providerModelPackageUri, providerModel, providerNameFormat),
+                                5, TimeUnit.MINUTES);
+            }
         }
     }
 
