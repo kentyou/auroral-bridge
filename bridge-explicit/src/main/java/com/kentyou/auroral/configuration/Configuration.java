@@ -36,6 +36,16 @@ public @interface Configuration {
     String auroral_node_url() default "http://localhost:81/";
 
     /**
+     * Auroral Node basic authentication user
+     */
+    String auroral_node_basic_user();
+
+    /**
+     * Auroral Node basic authentication password
+     */
+    String auroral_node_basic_password();
+
+    /**
      * ID of the contract local object
      */
     String oid_local();

@@ -26,8 +26,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.eclipse.jetty.security.HashLoginService;
+import org.eclipse.jetty.security.UserStore;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
+import org.eclipse.jetty.util.security.Password;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
 import org.eclipse.sensinact.core.command.AbstractTwinCommand;
 import org.eclipse.sensinact.core.command.GatewayThread;
@@ -95,7 +98,7 @@ public class BasicTest {
 
     @Test
     void testCall() throws Exception {
-        final String providerName = "toto";
+        final String providerName = "basic-call";
         final String baseUrl = "http://localhost:" + httpPort;
 
         // Create a configuration
@@ -129,6 +132,66 @@ public class BasicTest {
         assertTrue(found, "Provider not found");
 
         // Call the action
+        checkAction(providerName, arguments);
+    }
+
+    @Test
+    void testBasicAuth() throws Exception {
+        final String providerName = "auth-call";
+        final String baseUrl = "http://localhost:" + httpPort;
+
+        final String userName = "testUser";
+        final String password = "testPass";
+
+        final UserStore userStore = new UserStore();
+        userStore.addUser(userName, new Password(password), null);
+
+        final HashLoginService authBean = new HashLoginService();
+        authBean.setUserStore(userStore);
+
+        try {
+            server.addBean(authBean);
+
+            // Create a configuration
+            final Configuration config = cm.createFactoryConfiguration("auroral.explicit", "?");
+            config.update(new Hashtable<>(Map.of("auroral.node.url", baseUrl, "auroral.node.basic.user", userName,
+                    "auroral.node.basic.password", password, "oid.local", "123", "oid.remote", "456", "provider.name",
+                    providerName, "actions",
+                    "{\"values\": {\"sna.alias\": \"snaValues\", \"description\": \"Returns an hourly-aggregation for the specified days.\", \"resultType\": \"array\", \"service\": \"svc\", \"arguments\": {\"auroral-arg\": {\"sna.alias\": \"answer\", \"type\": \"number\", \"description\": \"some number\"}}}}")));
+
+            // Prepare the HTTP server
+            final String response = readFile("result-log-stats-hourly-by-date-range-page.json");
+            final AtomicReference<Map<String, String>> arguments = new AtomicReference<>();
+            handler.setHandler("/api/properties/123/456/values", (t, a) -> {
+                arguments.set(a);
+                return response;
+            });
+
+            checkAction(providerName, arguments);
+        } finally {
+            server.removeBean(authBean);
+        }
+    }
+
+    private void checkAction(final String providerName, final AtomicReference<Map<String, String>> urlArgs)
+            throws Exception {
+        boolean found = false;
+        for (int i = 0; i < 10; i++) {
+            found = thread.execute(new AbstractTwinCommand<Boolean>() {
+                @Override
+                protected Promise<Boolean> call(SensinactDigitalTwin twin, PromiseFactory pf) {
+                    return pf.resolved(twin.getProvider(providerName) != null);
+                }
+            }).getValue();
+            if (found) {
+                break;
+            }
+
+            Thread.sleep(100);
+        }
+        assertTrue(found, "Provider not found");
+
+        // Call the action
         final Object result = thread.execute(new AbstractTwinCommand<Object>() {
             @Override
             protected Promise<Object> call(SensinactDigitalTwin twin, PromiseFactory pf) {
@@ -142,7 +205,7 @@ public class BasicTest {
         }).getValue();
 
         // Check query
-        final Map<String, String> callArgs = arguments.get();
+        final Map<String, String> callArgs = urlArgs.get();
         assertNotNull(callArgs, "No call arguments");
         assertEquals(1, callArgs.size());
         assertTrue(callArgs.containsKey("auroral-arg"), "Requested argument not found");

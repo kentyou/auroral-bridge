@@ -33,7 +33,7 @@
       <groupId>org.eclipse.sensinact.gateway.core</groupId>
       <artifactId>impl</artifactId>
     </dependency>
-    
+
     <dependency>
       <groupId>org.eclipse.sensinact.gateway.southbound.wot</groupId>
       <artifactId>wot-api</artifactId>
@@ -110,6 +110,10 @@
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-server</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-security</artifactId>
     </dependency>
 
     <!-- SPI fly / Service loader -->
