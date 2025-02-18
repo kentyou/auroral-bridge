@@ -48,6 +48,7 @@
 	org.eclipse.jetty.client;version='[11.0.13,11.0.14)',\
 	org.eclipse.jetty.http;version='[11.0.13,11.0.14)',\
 	org.eclipse.jetty.io;version='[11.0.13,11.0.14)',\
+	org.eclipse.jetty.security;version='[11.0.13,11.0.14)',\
 	org.eclipse.jetty.server;version='[11.0.13,11.0.14)',\
 	org.eclipse.jetty.util;version='[11.0.13,11.0.14)',\
 	org.eclipse.sensinact.gateway.core.annotation;version='[0.0.2,0.0.3)',\

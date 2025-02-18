@@ -1,0 +1,219 @@
+{
+  "message": [
+    {
+      "oid": "822e7762-9452-47de-ae05-718f347f5e62",
+      "success": true,
+      "td": [
+        {
+          "message": {
+            "wrapper": [
+              {
+                "oid": "822e7762-9452-47de-ae05-718f347f5e62",
+                "success": true,
+                "td": {
+                  "id": "822e7762-9452-47de-ae05-718f347f5e62",
+                  "adapterId": "822e7762-9452-47de-ae05-718f347f5e62",
+                  "applicableGeographicalArea": "Worldwide",
+                  "currentStatus": [
+                    "Active",
+                    "Available"
+                  ],
+                  "dateLastUpdate": "2023-05-25T15:00:00.000Z",
+                  "securityDefinitions": {
+                    "nosec_sc": {
+                      "scheme": "nosec"
+                    }
+                  },
+                  "description": "Services for statistics",
+                  "actions": {
+                    "log-stats-for-month-action": {
+                      "description": "",
+                      "forms": [
+                        {
+                          "contentType": "application/json",
+                          "op": "invokeaction",
+                          "href": "http://localhost/log_route_stats_for_month"
+                        }
+                      ],
+                      "input": {
+                        "type": "jsonschema:ObjectSchema",
+                        "properties": {
+                          "month": {
+                            "type": "integer"
+                          },
+                          "year": {
+                            "type": "integer"
+                          },
+                          "realm_id": {
+                            "type": [
+                              "string",
+                              "uuid"
+                            ]
+                          },
+                          "route_type": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "output": {
+                        "type": "jsonschema:ObjectSchema"
+                      },
+                      "readOnly": true,
+                      "title": "oHA log statistics",
+                      "type": "object"
+                    }
+                  },
+                  "hasDomain": "Tourism",
+                  "hasFuncionality": "Only read",
+                  "properties": {
+                    "log-stats-hourly-by-date-range": {
+                      "type": "jsonschema:ObjectSchema",
+                      "readOnly": true,
+                      "description": "Legacy endpoint. Use log-stats-for-date-range",
+                      "forms": [
+                        {
+                          "contentType": "application/json",
+                          "op": "readproperty",
+                          "href": "http://localhost/log_route_stats_for_date_range"
+                        }
+                      ],
+                      "title": "oHA log statistics by date range"
+                    },
+                    "log-stats-language": {
+                      "type": "jsonschema:ObjectSchema",
+                      "readOnly": true,
+                      "description": "Legacy endpoint. Use log-language-for-date-range",
+                      "forms": [
+                        {
+                          "contentType": "application/json",
+                          "op": "readproperty",
+                          "href": "http://localhost/log_route_language_for_date_range"
+                        }
+                      ],
+                      "title": "oHA log language statistics"
+                    },
+                    "log-stats-for-month": {
+                      "type": "jsonschema:ObjectSchema",
+                      "readOnly": true,
+                      "description": "",
+                      "forms": [
+                        {
+                          "contentType": "application/json",
+                          "op": "readproperty",
+                          "href": "http://localhost/log_route_stats_for_month"
+                        }
+                      ],
+                      "title": "oHA log statistics"
+                    },
+                    "log-stats-hourly": {
+                      "type": "jsonschema:ObjectSchema",
+                      "readOnly": true,
+                      "description": "Legacy endpoint. Use log-stats-for-date",
+                      "forms": [
+                        {
+                          "contentType": "application/json",
+                          "op": "readproperty",
+                          "href": "http://localhost/log_route_stats_for_date"
+                        }
+                      ],
+                      "title": "oHA log statistics hourly"
+                    },
+                    "log-stats": {
+                      "type": "jsonschema:ObjectSchema",
+                      "readOnly": true,
+                      "description": "Legacy endpoint. Use log-stats-for-month",
+                      "forms": [
+                        {
+                          "contentType": "application/json",
+                          "op": "readproperty",
+                          "href": "http://localhost/log_route_stats_for_month"
+                        }
+                      ],
+                      "title": "oHA log statistics"
+                    },
+                    "log-stats-for-date-range": {
+                      "type": "jsonschema:ObjectSchema",
+                      "readOnly": true,
+                      "description": "",
+                      "forms": [
+                        {
+                          "contentType": "application/json",
+                          "op": "readproperty",
+                          "href": "http://localhost/log_route_stats_for_date_range"
+                        }
+                      ],
+                      "title": "oHA log statistics by date range"
+                    },
+                    "log-language-for-date-range": {
+                      "type": "jsonschema:ObjectSchema",
+                      "readOnly": true,
+                      "description": "",
+                      "forms": [
+                        {
+                          "contentType": "application/json",
+                          "op": "readproperty",
+                          "href": "http://localhost/log_route_language_for_date_range"
+                        }
+                      ],
+                      "title": "oHA log language statistics"
+                    },
+                    "log-stats-for-date": {
+                      "type": "jsonschema:ObjectSchema",
+                      "readOnly": true,
+                      "description": "",
+                      "forms": [
+                        {
+                          "contentType": "application/json",
+                          "op": "readproperty",
+                          "href": "http://localhost/log_route_stats_for_date"
+                        }
+                      ],
+                      "title": "oHA log statistics hourly"
+                    }
+                  },
+                  "hasSubDomain": "Statistics",
+                  "hasURL": "https://smartburgenland.at/",
+                  "language": [
+                    "de",
+                    "pt",
+                    "no",
+                    "it",
+                    "si",
+                    "en"
+                  ],
+                  "numberOfDownloads": 0,
+                  "provider": "LuxActive",
+                  "serviceDescription": "Services for oHA statistics",
+                  "serviceFree": true,
+                  "serviceName": "oHA Statistics Service",
+                  "title": "oHA Statistics Service",
+                  "versionOfService": "1.0",
+                  "registration": {
+                    "created": "2025-01-08T10:19:20.486Z",
+                    "modified": "2025-01-08T10:19:20.486Z"
+                  },
+                  "@context": [
+                    "https://www.w3.org/2019/wot/td/v1",
+                    {
+                      "adp": "https://auroral.iot.linkeddata.es/def/adapters#",
+                      "om": "http://www.ontology-of-units-of-measure.org/resource/om-2/",
+                      "geo": "http://www.w3.org/2003/01/geo/wgs84_pos#"
+                    },
+                    "https://w3c.github.io/wot-discovery/context/discovery-core.jsonld"
+                  ],
+                  "security": [
+                    "nosec_sc"
+                  ],
+                  "@type": [
+                    "Service"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "statusCode": 200
+}

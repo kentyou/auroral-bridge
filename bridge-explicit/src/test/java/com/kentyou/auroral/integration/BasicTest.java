@@ -38,6 +38,7 @@ import org.eclipse.sensinact.core.twin.SensinactDigitalTwin;
 import org.eclipse.sensinact.core.twin.SensinactProvider;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.osgi.service.cm.Configuration;
 import org.osgi.service.cm.ConfigurationAdmin;
@@ -52,14 +53,8 @@ public class BasicTest {
     static RequestHandler handler;
     static int httpPort;
 
-    @InjectService
-    GatewayThread thread;
-
-    @InjectService
-    ConfigurationAdmin cm;
-
     @BeforeAll
-    static void setup() throws Exception {
+    static void setupServer() throws Exception {
         threadPool = new QueuedThreadPool();
         threadPool.setName("server");
         handler = new RequestHandler();
@@ -73,11 +68,29 @@ public class BasicTest {
     }
 
     @AfterAll
-    static void teardown() throws Exception {
+    static void teardownServer() throws Exception {
         server.stop();
         server = null;
         threadPool.stop();
         threadPool = null;
+    }
+
+    @InjectService
+    GatewayThread thread;
+
+    @InjectService
+    ConfigurationAdmin cm;
+
+    AtomicReference<Map<String, String>> arguments;
+
+    @BeforeEach
+    void setupRun() throws Exception {
+        arguments = new AtomicReference<>();
+        final String response = readFile("result-log-stats-hourly-by-date-range-page.json");
+        handler.setHandler("/api/properties/123/456/values", (t, a) -> {
+            arguments.set(a);
+            return response;
+        });
     }
 
     /**
@@ -97,7 +110,7 @@ public class BasicTest {
     }
 
     @Test
-    void testCall() throws Exception {
+    void testExplicitActionCall() throws Exception {
         final String providerName = "basic-call";
         final String baseUrl = "http://localhost:" + httpPort;
 
@@ -106,14 +119,6 @@ public class BasicTest {
         config.update(new Hashtable<>(Map.of("auroral.node.url", baseUrl, "oid.local", "123", "oid.remote", "456",
                 "provider.name", providerName, "actions",
                 "{\"values\": {\"sna.alias\": \"snaValues\", \"description\": \"Returns an hourly-aggregation for the specified days.\", \"resultType\": \"array\", \"service\": \"svc\", \"arguments\": {\"auroral-arg\": {\"sna.alias\": \"answer\", \"type\": \"number\", \"description\": \"some number\"}}}}")));
-
-        // Prepare the HTTP server
-        final String response = readFile("result-log-stats-hourly-by-date-range-page.json");
-        final AtomicReference<Map<String, String>> arguments = new AtomicReference<>();
-        handler.setHandler("/api/properties/123/456/values", (t, a) -> {
-            arguments.set(a);
-            return response;
-        });
 
         boolean found = false;
         for (int i = 0; i < 10; i++) {
@@ -159,22 +164,56 @@ public class BasicTest {
                     providerName, "actions",
                     "{\"values\": {\"sna.alias\": \"snaValues\", \"description\": \"Returns an hourly-aggregation for the specified days.\", \"resultType\": \"array\", \"service\": \"svc\", \"arguments\": {\"auroral-arg\": {\"sna.alias\": \"answer\", \"type\": \"number\", \"description\": \"some number\"}}}}")));
 
-            // Prepare the HTTP server
-            final String response = readFile("result-log-stats-hourly-by-date-range-page.json");
-            final AtomicReference<Map<String, String>> arguments = new AtomicReference<>();
-            handler.setHandler("/api/properties/123/456/values", (t, a) -> {
-                arguments.set(a);
-                return response;
-            });
-
             checkAction(providerName, arguments);
         } finally {
             server.removeBean(authBean);
         }
     }
 
-    private void checkAction(final String providerName, final AtomicReference<Map<String, String>> urlArgs)
-            throws Exception {
+    @Test
+    void testActionsFromThingDescription() throws Exception {
+        final String providerName = "td-call";
+        final String remoteOid = "822e7762-9452-47de-ae05-718f347f5e62";
+        final String baseUrl = "http://localhost:" + httpPort;
+
+        // Create a configuration
+        final Configuration config = cm.createFactoryConfiguration("auroral.explicit", "?");
+        config.update(new Hashtable<>(Map.of("auroral.node.url", baseUrl, "oid.local", "123", "oid.remote", remoteOid,
+                "provider.name", providerName, "td.enable", true, "td.load.actions", true)));
+
+        // Prepare the HTTP server
+        final String response = readFile("thing-description.json");
+        final AtomicReference<Map<String, String>> tdArguments = new AtomicReference<>();
+        handler.setHandler("/api/discovery/remote/td/0000-0000-0000", (t, a) -> {
+            tdArguments.set(a);
+            return response;
+        });
+
+        boolean found = false;
+        for (int i = 0; i < 10; i++) {
+            found = thread.execute(new AbstractTwinCommand<Boolean>() {
+                @Override
+                protected Promise<Boolean> call(SensinactDigitalTwin twin, PromiseFactory pf) {
+                    return pf.resolved(twin.getProvider(providerName) != null);
+                }
+            }).getValue();
+            if (found) {
+                break;
+            }
+
+            Thread.sleep(100);
+        }
+        assertTrue(found, "Provider not found");
+
+        // Check the requested OID
+        assertEquals(1, tdArguments.get().size());
+        assertEquals(remoteOid, tdArguments.get().get("oids"));
+
+        // Call the action
+        checkAction(providerName, arguments);
+    }
+
+    void checkAction(final String providerName, final AtomicReference<Map<String, String>> urlArgs) throws Exception {
         boolean found = false;
         for (int i = 0; i < 10; i++) {
             found = thread.execute(new AbstractTwinCommand<Boolean>() {
