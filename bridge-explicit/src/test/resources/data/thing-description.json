@@ -26,6 +26,21 @@
                   },
                   "description": "Services for statistics",
                   "actions": {
+                    "tdValues": {
+                      "description": "test function",
+                      "forms": [],
+                      "input": {
+                        "type": "object",
+                        "properties": {
+                          "answer": {
+                            "type": "integer"
+                          }
+                        }
+                      },
+                      "output": {
+                        "type": "array"
+                      }
+                    },
                     "log-stats-for-month-action": {
                       "description": "",
                       "forms": [

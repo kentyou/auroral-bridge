@@ -91,6 +91,11 @@ public class BasicTest {
             arguments.set(a);
             return response;
         });
+
+        handler.setHandler("/api/properties/123/822e7762-9452-47de-ae05-718f347f5e62/tdValues", (t, a) -> {
+            arguments.set(a);
+            return response;
+        });
     }
 
     /**
@@ -137,7 +142,7 @@ public class BasicTest {
         assertTrue(found, "Provider not found");
 
         // Call the action
-        checkAction(providerName, arguments);
+        checkAction(providerName, "svc", "snaValues", "auroral-arg", arguments);
     }
 
     @Test
@@ -164,7 +169,7 @@ public class BasicTest {
                     providerName, "actions",
                     "{\"values\": {\"sna.alias\": \"snaValues\", \"description\": \"Returns an hourly-aggregation for the specified days.\", \"resultType\": \"array\", \"service\": \"svc\", \"arguments\": {\"auroral-arg\": {\"sna.alias\": \"answer\", \"type\": \"number\", \"description\": \"some number\"}}}}")));
 
-            checkAction(providerName, arguments);
+            checkAction(providerName, "svc", "snaValues", "auroral-arg", arguments);
         } finally {
             server.removeBean(authBean);
         }
@@ -210,10 +215,11 @@ public class BasicTest {
         assertEquals(remoteOid, tdArguments.get().get("oids"));
 
         // Call the action
-        checkAction(providerName, arguments);
+        checkAction(providerName, "auroral-wot", "tdValues", "answer", arguments);
     }
 
-    void checkAction(final String providerName, final AtomicReference<Map<String, String>> urlArgs) throws Exception {
+    void checkAction(final String providerName, final String svcName, final String rcName, final String argName,
+            final AtomicReference<Map<String, String>> urlArgs) throws Exception {
         boolean found = false;
         for (int i = 0; i < 10; i++) {
             found = thread.execute(new AbstractTwinCommand<Boolean>() {
@@ -236,7 +242,7 @@ public class BasicTest {
             protected Promise<Object> call(SensinactDigitalTwin twin, PromiseFactory pf) {
                 try {
                     SensinactProvider p = twin.getProvider(providerName);
-                    return p.getServices().get("svc").getResources().get("snaValues").act(Map.of("answer", 42));
+                    return p.getServices().get(svcName).getResources().get(rcName).act(Map.of("answer", 42));
                 } catch (Throwable e) {
                     return pf.failed(e);
                 }
@@ -247,8 +253,8 @@ public class BasicTest {
         final Map<String, String> callArgs = urlArgs.get();
         assertNotNull(callArgs, "No call arguments");
         assertEquals(1, callArgs.size());
-        assertTrue(callArgs.containsKey("auroral-arg"), "Requested argument not found");
-        assertEquals("42", callArgs.get("auroral-arg"));
+        assertTrue(callArgs.containsKey(argName), "Requested argument not found");
+        assertEquals("42", callArgs.get(argName));
 
         // Check result
         assertInstanceOf(List.class, result);
