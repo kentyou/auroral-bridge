@@ -398,16 +398,32 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
         final SingleHistoricValueResponse shvr = new SingleHistoricValueResponse();
         shvr.values = new ArrayList<>();
 
-        final List<StatEntryDTO> statEntries;
-        try {
-            statEntries = loadStatEntries("all", OffsetDateTime.ofInstant(fromTime, timeZone),
-                    OffsetDateTime.ofInstant(toTime, timeZone), "hour");
-        } catch (Exception e) {
-            logger.error("Error retrieving statistics for provider {} and route ID {}", provider, service, e);
-            return shvr;
-        }
-        if (statEntries == null) {
-            return shvr;
+        final List<StatEntryDTO> statEntries = new ArrayList<>();
+        Instant startOfPeriod = fromTime;
+        boolean lastRun = false;
+        while (!lastRun) {
+            Instant endOfPeriod = startOfPeriod.plus(7, ChronoUnit.DAYS);
+            if (endOfPeriod.isAfter(toTime)) {
+                endOfPeriod = toTime;
+                lastRun = true;
+            }
+
+            try {
+                final List<StatEntryDTO> periodEntries = loadStatEntries("all",
+                        OffsetDateTime.ofInstant(startOfPeriod, timeZone),
+                        OffsetDateTime.ofInstant(endOfPeriod, timeZone), "hour");
+                if (periodEntries != null && !periodEntries.isEmpty()) {
+                    statEntries.addAll(periodEntries);
+                } else {
+                    logger.debug("No stats entries for provider {} and route ID {} between {} and {}", provider,
+                            service, startOfPeriod, endOfPeriod);
+                }
+            } catch (Exception e) {
+                logger.error("Error retrieving statistics for provider {} and route ID {} between {} and {}", provider,
+                        service, startOfPeriod, endOfPeriod, e);
+            }
+
+            startOfPeriod = endOfPeriod;
         }
 
         for (StatEntryDTO stat : statEntries) {
