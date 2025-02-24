@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -392,23 +393,55 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
         return hrv;
     }
 
+    private List<Entry<Instant, Instant>> computePeriods(final Instant fromTime, final Instant toTime,
+            final Duration maxPeriod) {
+        final List<Entry<Instant, Instant>> periods = new ArrayList<>();
+        Instant startOfPeriod = fromTime;
+        boolean lastRun = false;
+        while (!lastRun) {
+            Instant endOfPeriod = startOfPeriod.plus(maxPeriod);
+            if (endOfPeriod.isAfter(toTime)) {
+                endOfPeriod = toTime;
+                lastRun = true;
+            }
+            periods.add(Map.entry(startOfPeriod, endOfPeriod));
+
+            startOfPeriod = endOfPeriod;
+        }
+        return periods;
+    }
+
     @Override
     public SingleHistoricValueResponse getValueRange(final String provider, final String service, final String resource,
             final Instant fromTime, final Instant toTime) {
         final SingleHistoricValueResponse shvr = new SingleHistoricValueResponse();
         shvr.values = new ArrayList<>();
 
-        final List<StatEntryDTO> statEntries;
-        try {
-            statEntries = loadStatEntries("all", OffsetDateTime.ofInstant(fromTime, timeZone),
-                    OffsetDateTime.ofInstant(toTime, timeZone), "hour");
-        } catch (Exception e) {
-            logger.error("Error retrieving statistics for provider {} and route ID {}", provider, service, e);
-            return shvr;
-        }
-        if (statEntries == null) {
-            return shvr;
-        }
+        // Compute the periods
+        final List<Entry<Instant, Instant>> periods = computePeriods(fromTime, toTime, Duration.of(7, ChronoUnit.DAYS));
+
+        // Do the queries
+        final List<StatEntryDTO> statEntries = periods.parallelStream().flatMap(e -> {
+            final Instant periodStart = e.getKey();
+            final Instant periodEnd = e.getValue();
+            logger.debug("Querying provider {} and route ID {} between {} and {}", provider, service, periodStart,
+                    periodEnd);
+            try {
+                final List<StatEntryDTO> periodEntries = loadStatEntries("all",
+                        OffsetDateTime.ofInstant(periodStart, timeZone), OffsetDateTime.ofInstant(periodEnd, timeZone),
+                        "hour");
+                if (periodEntries == null || periodEntries.isEmpty()) {
+                    logger.debug("No stats entries for provider {} and route ID {} between {} and {}", provider,
+                            service, periodStart, periodEnd);
+                }
+                return periodEntries.stream();
+            } catch (Exception ex) {
+                logger.error("Error retrieving statistics for provider {} and route ID {} between {} and {}", provider,
+                        service, periodStart, periodEnd, ex);
+                return null;
+            }
+        }).filter(Objects::nonNull).sorted((a, b) -> Instant.parse(a.timestamp).compareTo(Instant.parse(b.timestamp)))
+                .toList();
 
         for (StatEntryDTO stat : statEntries) {
             final Instant timestamp = Instant.parse(stat.timestamp);
