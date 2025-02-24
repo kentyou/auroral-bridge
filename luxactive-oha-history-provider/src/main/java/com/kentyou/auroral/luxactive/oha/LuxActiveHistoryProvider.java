@@ -27,7 +27,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -141,11 +140,6 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
      * Time offset for each queries
      */
     private ZoneId timeZone;
-
-    /**
-     * Keep track of numeric resources
-     */
-    private Set<String> numericResources = new HashSet<>();
 
     @Activate
     void activate(final HistoryProviderConfiguration config) throws Exception {
@@ -280,6 +274,11 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
 
             // List known provider
             final Set<ResourcePath> knownPaths = getProvidedPaths();
+            if (knownPaths.isEmpty()) {
+                // No providers yet
+                return false;
+            }
+
             final Set<String> viewedRoutes = new HashSet<>();
             Instant lastTimestamp = null;
 
@@ -328,11 +327,6 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
                                 result.type = type;
                                 result.nullAction = NullAction.UPDATE_IF_PRESENT;
                                 result.duplicateDataAction = DuplicateAction.UPDATE_ALWAYS;
-
-                                if (Number.class.isAssignableFrom(result.type)) {
-                                    numericResources.add(rcName);
-                                }
-
                                 return result;
                             }
                         }));
@@ -347,7 +341,7 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
                 // Put zeros to unseen numerical values
                 final Instant latestTimestamp = lastTimestamp;
                 streams.add(knownPaths.stream().filter(rc -> !viewedRoutes.contains(rc.provider()))
-                        .filter(rc -> numericResources.contains(rc.resource())).map(rc -> {
+                        .filter(rc -> StatLogEntryDTO.isNumericalResource(rc.resource())).map(rc -> {
                             final GenericDto result = new GenericDto();
                             result.timestamp = latestTimestamp;
                             result.modelPackageUri = modelPackageUri;
@@ -356,7 +350,7 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
                             result.service = STATS_SERVICE;
                             result.resource = rc.resource();
                             result.value = 0;
-                            result.type = Number.class;
+                            result.type = result.resource.contains("Time") ? Double.class : Integer.class;
                             result.nullAction = NullAction.UPDATE_IF_PRESENT;
                             result.duplicateDataAction = DuplicateAction.UPDATE_ALWAYS;
                             return result;
@@ -379,13 +373,18 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
     @Override
     public Set<ResourcePath> getProvidedPaths() {
         try {
+            /*
+             * We can't know the resources from the provider as it is loaded (route type is
+             * missing from the description) and we won't have the resources until
+             * updateCurrentValues() finds them. As a result: we fall back on listing all
+             * possible resources.
+             */
+            final Set<String> resources = StatLogEntryDTO.getAllPossibleResources();
             return thread.execute(new AbstractTwinCommand<Set<ResourcePath>>() {
                 @Override
                 protected Promise<Set<ResourcePath>> call(SensinactDigitalTwin twin, PromiseFactory pf) {
-                    return pf.resolved(twin.getProviders(modelPackageUri, model).stream()
-                            .flatMap(p -> Optional.ofNullable(p.getServices().get(STATS_SERVICE))
-                                    .map(SensinactService::getResources).map(Map::keySet).orElse(Set.of()).stream()
-                                    .map(rc -> new ResourcePath(model, p.getName(), STATS_SERVICE, rc)))
+                    return pf.resolved(twin.getProviders().stream().filter(p -> p.getModelName().equals(model)).flatMap(
+                            p -> resources.stream().map(rc -> new ResourcePath(model, p.getName(), STATS_SERVICE, rc)))
                             .collect(Collectors.toSet()));
                 }
             }).getValue();
@@ -520,11 +519,11 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
 
             // Put zeros to unseen numerical values
             shvr.values.addAll(knownPaths.stream().filter(rc -> !viewedRoutes.contains(rc.provider()))
-                    .filter(rc -> numericResources.contains(rc.resource()))
+                    .filter(rc -> StatLogEntryDTO.isNumericalResource(rc.resource()))
                     .map(rc -> makeHistoricResourceValue(rc.provider(), rc.resource(), 0, timestamp)).toList());
         }
 
-        if (shvr.values.isEmpty() && numericResources.contains(resource)) {
+        if (shvr.values.isEmpty() && StatLogEntryDTO.isNumericalResource(resource)) {
             // No value means no results: consider 0 when talking about numerical values
             shvr.values = List.of(makeHistoricResourceValue(provider, resource, 0, fromTime));
         }

@@ -276,7 +276,7 @@ public class LuxActiveBridgeTest {
         tracker.close();
 
         // Call the history API
-        assertEquals(26, historyApi.getProvidedPaths().size()); // 13 per route
+        assertEquals(32, historyApi.getProvidedPaths().size());
         Instant fromTime = Instant.parse("2024-05-01T00:00:00Z");
         Instant toTime = Instant.parse("2024-05-02T00:00:00Z");
 
@@ -334,7 +334,7 @@ public class LuxActiveBridgeTest {
         tracker.close();
 
         // Call the history API
-        assertEquals(26, historyApi.getProvidedPaths().size()); // 13 per route
+        assertEquals(32, historyApi.getProvidedPaths().size());
         Instant fromTime = Instant.parse("2024-05-01T00:00:00Z");
         Instant toTime = Instant.parse("2024-05-02T00:00:00Z");
 
