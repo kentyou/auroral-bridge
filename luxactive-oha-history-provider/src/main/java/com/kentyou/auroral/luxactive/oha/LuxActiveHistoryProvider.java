@@ -440,7 +440,8 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
                         service, periodStart, periodEnd, ex);
                 return null;
             }
-        }).sorted((a, b) -> Instant.parse(a.timestamp).compareTo(Instant.parse(b.timestamp))).toList();
+        }).filter(Objects::nonNull).sorted((a, b) -> Instant.parse(a.timestamp).compareTo(Instant.parse(b.timestamp)))
+                .toList();
 
         for (StatEntryDTO stat : statEntries) {
             final Instant timestamp = Instant.parse(stat.timestamp);
