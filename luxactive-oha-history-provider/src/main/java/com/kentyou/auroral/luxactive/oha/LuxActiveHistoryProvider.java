@@ -351,17 +351,21 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
 
     @Override
     public Set<ResourcePath> getProvidedPaths() {
-        final Map<String, List<String>> rcPerRouteType = knownProviders.values().stream().distinct()
-                .collect(Collectors.toMap(Function.identity(), StatLogEntryDTO::getResources));
-
-        return knownProviders.entrySet().stream().flatMap(e -> {
-            final String providerName = e.getKey();
-            final List<String> rcs = rcPerRouteType.get(e.getValue());
-            if (rcs == null || rcs.isEmpty()) {
-                return Stream.empty();
-            }
-            return rcs.stream().map(rcName -> new ResourcePath(model, providerName, STATS_SERVICE, rcName));
-        }).collect(Collectors.toSet());
+        try {
+            return thread.execute(new AbstractTwinCommand<Set<ResourcePath>>() {
+                @Override
+                protected Promise<Set<ResourcePath>> call(SensinactDigitalTwin twin, PromiseFactory pf) {
+                    return pf.resolved(twin.getProviders(modelPackageUri, model).stream()
+                            .flatMap(p -> Optional.ofNullable(p.getServices().get(STATS_SERVICE))
+                                    .map(SensinactService::getResources).map(Map::keySet).orElse(Set.of()).stream()
+                                    .map(rc -> new ResourcePath(model, p.getName(), STATS_SERVICE, rc)))
+                            .collect(Collectors.toSet()));
+                }
+            }).getValue();
+        } catch (Exception e) {
+            logger.error("Error listing oHA providers", e);
+            return Set.of();
+        }
     }
 
     /**
