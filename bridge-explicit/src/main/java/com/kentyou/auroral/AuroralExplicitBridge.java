@@ -13,6 +13,7 @@
 
 package com.kentyou.auroral;
 
+import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -21,8 +22,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
+import org.eclipse.jetty.client.HttpClient;
 import org.eclipse.jetty.client.api.AuthenticationStore;
+import org.eclipse.jetty.client.api.ContentResponse;
+import org.eclipse.jetty.client.api.Request;
 import org.eclipse.jetty.client.util.BasicAuthentication;
 import org.eclipse.sensinact.core.command.AbstractSensinactCommand;
 import org.eclipse.sensinact.core.command.AbstractTwinCommand;
@@ -36,6 +45,11 @@ import org.eclipse.sensinact.core.twin.SensinactDigitalTwin;
 import org.eclipse.sensinact.core.twin.SensinactProvider;
 import org.eclipse.sensinact.core.whiteboard.WhiteboardConstants;
 import org.eclipse.sensinact.core.whiteboard.WhiteboardHandler;
+import org.eclipse.sensinact.gateway.southbound.wot.api.ActionAffordance;
+import org.eclipse.sensinact.gateway.southbound.wot.api.Thing;
+import org.eclipse.sensinact.gateway.southbound.wot.api.dataschema.DataSchema;
+import org.eclipse.sensinact.gateway.southbound.wot.api.dataschema.NullSchema;
+import org.eclipse.sensinact.gateway.southbound.wot.api.dataschema.ObjectSchema;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.ServiceRegistration;
 import org.osgi.service.component.annotations.Component;
@@ -50,6 +64,7 @@ import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.json.JsonMapper;
+import com.kentyou.auroral.configuration.ActionArgumentDTO;
 import com.kentyou.auroral.configuration.ActionDTO;
 import com.kentyou.auroral.configuration.Configuration;
 
@@ -127,10 +142,15 @@ public class AuroralExplicitBridge {
             throw new IllegalArgumentException("Remote OID can't be empty");
         }
 
+        final boolean loadTD = config.td_enable();
+        final boolean loadActionsFromTD = loadTD && config.td_load_actions();
+
         final Map<String, ActionDTO> configActions;
         final String strActions = config.actions();
         if (strActions == null || strActions.isBlank()) {
-            logger.warn("No actions defined");
+            if (!loadActionsFromTD) {
+                logger.warn("No actions defined");
+            }
             configActions = Map.of();
         } else {
             configActions = mapper.readValue(config.actions(), new TypeReference<Map<String, ActionDTO>>() {
@@ -145,8 +165,31 @@ public class AuroralExplicitBridge {
             store.addAuthenticationResult(new BasicAuthentication.BasicResult(nodeUrl, userAuth, userPass));
         }
 
+        final Thing td;
+        if (!loadTD) {
+            td = null;
+        } else {
+            td = loadDescription(nodeUrl, Optional.ofNullable(config.oid_remote_agid()).orElse("0000-0000-0000"),
+                    remoteOid);
+        }
+
+        final Map<String, ActionDTO> tdActions;
+        if (!loadActionsFromTD) {
+            tdActions = Map.of();
+            if (configActions.isEmpty()) {
+                logger.warn("Configuration defined no actions nor enables to load them from Thing Description");
+            }
+        } else {
+            // Load the Thing description
+            tdActions = loadActionsFromTD(td);
+            if (tdActions.isEmpty()) {
+                logger.warn("No actions loaded from thing description");
+            }
+        }
+
         // Convert actions
-        final List<SnaActionDTO> snaActions = configActions.entrySet().stream()
+        final List<SnaActionDTO> snaActions = Stream
+                .concat(configActions.entrySet().stream(), tdActions.entrySet().stream())
                 .map(e -> SnaActionDTO.fromAuroral(e.getKey(), e.getValue())).toList();
 
         try {
@@ -286,5 +329,121 @@ public class AuroralExplicitBridge {
                 }
             }
         }).getValue();
+    }
+
+    /**
+     * Loads the Thing Description of the remote OID
+     *
+     * @param nodeUrl   Auroral node URL
+     * @param aigd      Target gateway ID
+     * @param remoteOid Remote (target) OID
+     * @return The parsed thing description
+     * @throws ExecutionException   Error querying server
+     * @throws TimeoutException     Timeout querying for a thing description
+     * @throws InterruptedException Interrupted while querying for a thing
+     *                              description
+     * @throws IOException          Error parsing response
+     */
+    @SuppressWarnings("unchecked")
+    Thing loadDescription(final URI nodeUrl, final String agid, final String remoteOid)
+            throws InterruptedException, TimeoutException, ExecutionException, IOException {
+        final HttpClient client = httpClient.getClient();
+        final Request request = client.newRequest(nodeUrl).path("/api/discovery/remote/td/" + agid);
+        request.param("oids", remoteOid);
+
+        final ContentResponse response = request.send();
+        if (response.getStatus() != 200) {
+            throw new IOException("HTTP query to " + request.getURI() + " returned with code " + response.getStatus());
+        }
+
+        // Load message root
+        final Map<String, Object> root = mapper.readValue(response.getContentAsString(),
+                new TypeReference<Map<String, Object>>() {
+                });
+
+        final Number statusCode = (Number) root.get("statusCode");
+        if (statusCode == null || statusCode.intValue() != 200) {
+            throw new IOException("Invalid status code " + statusCode);
+        }
+
+        // Walk through the wrapping
+        final Map<String, Object> rawTd = Optional.ofNullable((List<Map<String, Object>>) root.get("message"))
+                .filter(l -> l.size() == 1).map(l -> l.get(0))
+                .filter(o -> remoteOid.equals(o.get("oid")) && Boolean.TRUE.equals(o.get("success")))
+                .map(o -> (List<Map<String, Object>>) o.get("td")).filter(l -> l.size() == 1).map(l -> l.get(0))
+                .map(o -> (Map<String, Object>) o.get("message")).map(o -> (List<Map<String, Object>>) o.get("wrapper"))
+                .filter(l -> l.size() == 1).map(l -> l.get(0)).map(o -> (Map<String, Object>) o.get("td"))
+                .orElseThrow(() -> new IOException("No ThingDescription found in response"));
+
+        return mapper.convertValue(rawTd, Thing.class);
+    }
+
+    /**
+     * Loads actions descriptions from a thing description, ignores unsupported ones
+     *
+     * @param td Parsed thing description
+     * @return Action name -&gt; action description
+     */
+    Map<String, ActionDTO> loadActionsFromTD(final Thing td) {
+        if (td.actions == null || td.actions.isEmpty()) {
+            logger.warn("No actions found in thing description");
+            return Map.of();
+        }
+
+        return td.actions.entrySet().stream().map(e -> actionFromThing(e.getKey(), e.getValue()))
+                .filter(Objects::nonNull).collect(Collectors.toMap(Entry::getKey, Entry::getValue));
+    }
+
+    /**
+     * Describes an action from its thing description format
+     *
+     * @param actionName Name of the action
+     * @param action     Description of the action affordance
+     * @return A mapping of the action name to its description, null if arguments
+     *         are not compatible
+     */
+    Entry<String, ActionDTO> actionFromThing(final String actionName, final ActionAffordance action) {
+        final ActionDTO dto = new ActionDTO();
+        dto.description = action.description;
+        dto.resultType = action.output.type;
+        dto.service = "auroral-wot";
+        dto.arguments = argumentsFromThing(actionName, action.input);
+        return dto.arguments != null ? Map.entry(actionName, dto) : null;
+    }
+
+    /**
+     * Converts a thing action input schema into arguments. Only support object
+     * schemas
+     *
+     * @param action Action name
+     * @param schema Action input schema
+     * @return A map of arguments descriptions, null if not handled
+     */
+    Map<String, ActionArgumentDTO> argumentsFromThing(final String action, final DataSchema schema) {
+        if (schema == null || schema instanceof NullSchema) {
+            return Map.of();
+        }
+
+        if (schema instanceof ObjectSchema objSchema) {
+            return objSchema.properties.entrySet().stream()
+                    .map(e -> Map.entry(e.getKey(), argumentFromThing(e.getValue())))
+                    .collect(Collectors.toMap(Entry::getKey, Entry::getValue));
+        } else {
+            logger.error("Only object schemas are supported. Action {} is ignored.", action);
+            return null;
+        }
+    }
+
+    /**
+     * Converts a single thing argument schema into an argument description
+     *
+     * @param schema Argument schema
+     * @return The argument description
+     */
+    ActionArgumentDTO argumentFromThing(final DataSchema schema) {
+        final ActionArgumentDTO dto = new ActionArgumentDTO();
+        dto.type = schema.type;
+        dto.description = schema.description;
+        return dto;
     }
 }

@@ -56,7 +56,22 @@ public @interface Configuration {
     String oid_remote();
 
     /**
+     * Remote object gateway ID
+     */
+    String oid_remote_agid() default "0000-0000-0000";
+
+    /**
      * Description of the actions to register in sensiNact
      */
     String actions();
+
+    /**
+     * Flag to use the Thing Description to describe actions
+     */
+    boolean td_enable();
+
+    /**
+     * Flag to load actions from description
+     */
+    boolean td_load_actions() default true;
 }
