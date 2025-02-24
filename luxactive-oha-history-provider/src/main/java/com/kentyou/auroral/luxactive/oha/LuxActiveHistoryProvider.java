@@ -143,11 +143,6 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
     private ZoneId timeZone;
 
     /**
-     * Keep track of known route IDs to tell the history provider and of their type
-     */
-    private Map<String, String> knownProviders = new HashMap<>();
-
-    /**
      * Keep track of numeric resources
      */
     private Set<String> numericResources = new HashSet<>();
@@ -276,12 +271,18 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
      */
     boolean updateCurrentValues() {
         try {
-            final List<StatEntryDTO> statEntries = loadStatEntries("all", OffsetDateTime.now(timeZone).minusMonths(2),
-                    OffsetDateTime.now(timeZone), "day");
+            final List<StatEntryDTO> statEntries = loadStatEntries("all", OffsetDateTime.now(timeZone).minusHours(1),
+                    OffsetDateTime.now(timeZone), "hour");
             if (statEntries == null) {
                 // No entries
                 return false;
             }
+
+            // List known provider
+            final Set<ResourcePath> knownPaths = getProvidedPaths();
+            final Set<String> viewedRoutes = new HashSet<>();
+            Instant lastTimestamp = null;
+
             final Map<String, List<GenericDto>> latestDetails = new HashMap<>();
             for (StatEntryDTO statEntry : statEntries) {
                 if (statEntry.timestamp == null || statEntry.timestamp.isBlank()) {
@@ -290,6 +291,10 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
                 }
 
                 final Instant timestamp = Instant.parse(statEntry.timestamp);
+                if (lastTimestamp == null || lastTimestamp.isBefore(timestamp)) {
+                    lastTimestamp = timestamp;
+                }
+
                 if (statEntry.perRoute == null || statEntry.perRoute.isEmpty()) {
                     logger.debug("No data at {}", timestamp);
                     continue;
@@ -303,6 +308,7 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
                     }
 
                     final String providerName = providerTemplate.formatted(routeDto.getId());
+                    viewedRoutes.add(providerName);
 
                     final List<GenericDto> currentDtos = latestDetails.get(routeDto.getId());
                     if (currentDtos == null || currentDtos.isEmpty()
@@ -330,15 +336,36 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
                                 return result;
                             }
                         }));
-
-                        knownProviders.put(providerName, routeDto.getType());
                     }
                 }
             }
 
+            final List<Stream<GenericDto>> streams = new ArrayList<>();
+            streams.add(latestDetails.values().stream().filter(Objects::nonNull).flatMap(l -> l.stream()));
+
+            if (lastTimestamp != null) {
+                // Put zeros to unseen numerical values
+                final Instant latestTimestamp = lastTimestamp;
+                streams.add(knownPaths.stream().filter(rc -> !viewedRoutes.contains(rc.provider()))
+                        .filter(rc -> numericResources.contains(rc.resource())).map(rc -> {
+                            final GenericDto result = new GenericDto();
+                            result.timestamp = latestTimestamp;
+                            result.modelPackageUri = modelPackageUri;
+                            result.model = model;
+                            result.provider = rc.provider();
+                            result.service = STATS_SERVICE;
+                            result.resource = rc.resource();
+                            result.value = 0;
+                            result.type = Number.class;
+                            result.nullAction = NullAction.UPDATE_IF_PRESENT;
+                            result.duplicateDataAction = DuplicateAction.UPDATE_ALWAYS;
+                            return result;
+                        }));
+            }
+
             // Update the twin
             final BulkGenericDto bulk = new BulkGenericDto();
-            bulk.dtos = latestDetails.values().stream().filter(Objects::nonNull).flatMap(l -> l.stream()).toList();
+            bulk.dtos = streams.stream().flatMap(Function.identity()).toList();
             if (!bulk.dtos.isEmpty()) {
                 push.pushUpdate(bulk).getValue();
             }
@@ -421,6 +448,9 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
         final SingleHistoricValueResponse shvr = new SingleHistoricValueResponse();
         shvr.values = new ArrayList<>();
 
+        // List known provider
+        final Set<ResourcePath> knownPaths = getProvidedPaths();
+
         // Compute the periods
         final List<Entry<Instant, Instant>> periods = computePeriods(fromTime, toTime, Duration.of(7, ChronoUnit.DAYS));
 
@@ -488,22 +518,10 @@ public class LuxActiveHistoryProvider implements SimpleHistory {
                 }
             }
 
-            final Map<String, List<String>> rcPerRouteType = knownProviders.values().stream().distinct()
-                    .collect(Collectors.toMap(Function.identity(), type -> StatLogEntryDTO.getResources(type).stream()
-                            .filter(numericResources::contains).toList()));
-            shvr.values
-                    .addAll(knownProviders
-                            .entrySet().stream().filter(
-                                    e -> !viewedRoutes.contains(e.getKey()))
-                            .flatMap(
-                                    e -> Optional
-                                            .ofNullable(
-                                                    rcPerRouteType.get(e.getValue()))
-                                            .map(rcList -> rcList.stream()
-                                                    .map(rcName -> makeHistoricResourceValue(e.getKey(), rcName, 0,
-                                                            timestamp)))
-                                            .orElse(Stream.empty()))
-                            .toList());
+            // Put zeros to unseen numerical values
+            shvr.values.addAll(knownPaths.stream().filter(rc -> !viewedRoutes.contains(rc.provider()))
+                    .filter(rc -> numericResources.contains(rc.resource()))
+                    .map(rc -> makeHistoricResourceValue(rc.provider(), rc.resource(), 0, timestamp)).toList());
         }
 
         if (shvr.values.isEmpty() && numericResources.contains(resource)) {

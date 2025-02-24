@@ -36,6 +36,7 @@ import org.eclipse.sensinact.core.command.AbstractTwinCommand;
 import org.eclipse.sensinact.core.command.GatewayThread;
 import org.eclipse.sensinact.core.snapshot.ProviderSnapshot;
 import org.eclipse.sensinact.core.twin.SensinactDigitalTwin;
+import org.eclipse.sensinact.core.twin.SensinactProvider;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -179,6 +180,16 @@ public class LuxActiveBridgeTest {
             ohaConfig.delete();
             ohaConfig = null;
         }
+
+        // Also clean up providers
+        thread.execute(new AbstractTwinCommand<Void>() {
+            @Override
+            protected Promise<Void> call(SensinactDigitalTwin twin, PromiseFactory pf) {
+                twin.getProviders().stream().filter(p -> "oha-activity".equals(p.getModelName()))
+                        .forEach(SensinactProvider::delete);
+                return pf.resolved(null);
+            }
+        }).getValue();
     }
 
     @Test
