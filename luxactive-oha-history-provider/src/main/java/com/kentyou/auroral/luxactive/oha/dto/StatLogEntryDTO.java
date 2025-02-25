@@ -17,6 +17,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.eclipse.sensinact.core.push.dto.GenericDto;
 
@@ -35,6 +37,9 @@ public class StatLogEntryDTO {
     public static final String RC_QRCODE_COUNT_PER_MILLE = "qrCodeCountPerMille";
 
     public static final String[] RESOURCES = { RC_TYPE, RC_RANK, RC_TOTAL_RETENTION_TIME, RC_AVERAGE_RETENTION_TIME,
+            RC_LOG_COUNT, RC_DEVICE_COUNT, RC_SESSION_COUNT, RC_QRCODE_COUNT, RC_QRCODE_COUNT_PER_MILLE };
+
+    public static final String[] RESOURCES_NUMERICAL = { RC_RANK, RC_TOTAL_RETENTION_TIME, RC_AVERAGE_RETENTION_TIME,
             RC_LOG_COUNT, RC_DEVICE_COUNT, RC_SESSION_COUNT, RC_QRCODE_COUNT, RC_QRCODE_COUNT_PER_MILLE };
 
     @JsonProperty("log_total_retention_time")
@@ -148,6 +153,15 @@ public class StatLogEntryDTO {
         }
 
         return List.of(RESOURCES, routeResources).stream().flatMap(arr -> Arrays.stream(arr)).toList();
+    }
+
+    public static Set<String> getAllPossibleResources() {
+        return List.of(RESOURCES, ActivityDTO.RESOURCES, ArticleDTO.RESOURCES, PageDTO.RESOURCES).stream()
+                .flatMap(arr -> Arrays.stream(arr)).collect(Collectors.toSet());
+    }
+
+    public static boolean isNumericalResource(String rcName) {
+        return Set.of(RESOURCES_NUMERICAL).contains(rcName);
     }
 
     public Object getFieldByName(String rcName) {

@@ -27,13 +27,16 @@ import java.time.ZoneOffset;
 import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
+import org.eclipse.sensinact.core.command.AbstractSensinactCommand;
 import org.eclipse.sensinact.core.command.AbstractTwinCommand;
 import org.eclipse.sensinact.core.command.GatewayThread;
+import org.eclipse.sensinact.core.model.SensinactModelManager;
 import org.eclipse.sensinact.core.snapshot.ProviderSnapshot;
 import org.eclipse.sensinact.core.twin.SensinactDigitalTwin;
 import org.junit.jupiter.api.AfterAll;
@@ -51,7 +54,11 @@ import org.osgi.util.promise.Promise;
 import org.osgi.util.promise.PromiseFactory;
 import org.osgi.util.tracker.ServiceTracker;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.kentyou.auroral.luxactive.oha.LuxActiveHistoryProvider;
+import com.kentyou.auroral.luxactive.oha.dto.StatEntryDTO;
 import com.kentyou.sensinact.history.dto.single.HistoricResourceValue;
 import com.kentyou.sensinact.history.dto.single.SingleHistoricValueResponse;
 import com.kentyou.sensinact.history.spi.SimpleHistory;
@@ -85,6 +92,13 @@ public class LuxActiveBridgeTest {
      * Current oHA bridge configuration
      */
     Configuration ohaConfig;
+
+    /**
+     * List of route IDs found in the JSON file
+     */
+    static List<String> routeIds;
+
+    final String model = "oha-activity";
 
     @BeforeAll
     static void setup() throws Exception {
@@ -148,21 +162,57 @@ public class LuxActiveBridgeTest {
         assertTrue(found, "Provider '" + providerName + "' not found");
     }
 
+    /**
+     * Wait for the appearance of a provider and its stats service
+     *
+     * @param providerName Name of the provider
+     */
+    void waitForProviderStats(final String providerName)
+            throws AssertionFailedError, InvocationTargetException, InterruptedException {
+        boolean found = false;
+        for (int i = 0; i < 10; i++) {
+            found = thread.execute(new AbstractTwinCommand<Boolean>() {
+                @Override
+                protected Promise<Boolean> call(SensinactDigitalTwin twin, PromiseFactory pf) {
+                    return pf.resolved(Optional.ofNullable(twin.getProvider(providerName))
+                            .map(p -> p.getServices().containsKey(LuxActiveHistoryProvider.STATS_SERVICE))
+                            .orElse(false));
+                }
+            }).getValue();
+            if (found) {
+                break;
+            }
+
+            Thread.sleep(100);
+        }
+        assertTrue(found, "Provider '" + providerName + "' not found");
+    }
+
     @BeforeEach
     void setupBridge() throws Exception {
-        final String baseUrl = "http://localhost:" + httpPort;
+        final String resultFileContent = readFile("result-log-stats-hourly-by-date-range-page.json");
+        if (routeIds == null || routeIds.isEmpty()) {
+            // Load route IDs
+            final ObjectMapper mapper = JsonMapper.builder().build();
+            final Map<String, Object> parsedContent = mapper.readValue(resultFileContent, new TypeReference<>() {
+            });
+            final List<StatEntryDTO> items = mapper.convertValue(parsedContent.get("message"), new TypeReference<>() {
+            });
+            routeIds = items.stream().flatMap(dto -> dto.perRoute.stream()).map(dto -> dto.getRoute().getId())
+                    .distinct().toList();
+        }
 
         // Create a configuration for the Auroral Bridge
+        final String baseUrl = "http://localhost:" + httpPort;
         auroralConfig = cm.createFactoryConfiguration("auroral.explicit", "?");
         auroralConfig.update(new Hashtable<>(Map.of("auroral.node.url", baseUrl, "oid.local", "123", "oid.remote",
                 "456", "provider.name", auroralProviderName, "actions",
                 "{\"log-stats-hourly-by-date-range\": {\"service\": \"svc\", \"sna.alias\": \"logHourlyByDateRange\", \"resultType\": \"array\", \"arguments\": {\"route_type\": {\"type\": \"string\"}, \"realm_id\": {\"type\": \"string\"}, \"date_from\": {\"type\": \"string\"}, \"date_to\": {\"type\": \"string\"}, \"aggregation_window\": {\"type\": \"string\"}}}}")));
 
         // Prepare the HTTP server
-        final String response = readFile("result-log-stats-hourly-by-date-range-page.json");
         handler.setHandler("/api/properties/123/456/log-stats-hourly-by-date-range", (t, a) -> {
             arguments.set(a);
-            return response;
+            return resultFileContent;
         });
 
         waitForProvider(auroralProviderName);
@@ -179,12 +229,41 @@ public class LuxActiveBridgeTest {
             ohaConfig.delete();
             ohaConfig = null;
         }
+
+        // Also clean up providers
+        thread.execute(new AbstractSensinactCommand<Void>() {
+            @Override
+            protected Promise<Void> call(SensinactDigitalTwin twin, SensinactModelManager mgr, PromiseFactory pf) {
+                mgr.deleteModel(model);
+                return pf.resolved(null);
+            }
+        }).getValue();
+    }
+
+    void createProviders(final String ohaProviderTemplate) throws InvocationTargetException, InterruptedException {
+        final List<String> ohaProviders = routeIds.stream().map(ohaProviderTemplate::formatted).toList();
+        thread.execute(new AbstractSensinactCommand<Void>() {
+            @Override
+            protected Promise<Void> call(SensinactDigitalTwin twin, SensinactModelManager mgr, PromiseFactory pf) {
+                // Make sure the model exists
+                if (mgr.getModel(model) == null) {
+                    mgr.createModel(model).build();
+                }
+
+                ohaProviders.stream().forEach(name -> twin.createProvider(model, name));
+                return pf.resolved(null);
+            }
+        }).getValue();
     }
 
     @Test
     void testCurrentValues() throws Exception {
         // Create a configuration for the oHA stats handler
         final String ohaProviderTemplate = "oha-history-test-%s";
+
+        // Load providers
+        createProviders(ohaProviderTemplate);
+
         ohaConfig = cm.createFactoryConfiguration("luxactive.oha.statistics", "?");
         ohaConfig.update(new Hashtable<>(
                 Map.of("oha.provider.template", ohaProviderTemplate, "bridge.provider", auroralProviderName,
@@ -192,7 +271,7 @@ public class LuxActiveBridgeTest {
 
         final AtomicReference<String> ohaProviderName = new AtomicReference<String>(
                 ohaProviderTemplate.formatted("31b45057-b469-4483-b05a-1de81e8483ed"));
-        waitForProvider(ohaProviderName.get());
+        waitForProviderStats(ohaProviderName.get());
 
         // Check its values
         ProviderSnapshot ps = thread.execute(new AbstractTwinCommand<ProviderSnapshot>() {
@@ -250,6 +329,10 @@ public class LuxActiveBridgeTest {
     void testHistory() throws Exception {
         // Create a configuration for the oHA stats handler
         final String ohaProviderTemplate = "oha-history-test-%s";
+
+        // Load providers
+        createProviders(ohaProviderTemplate);
+
         ohaConfig = cm.createFactoryConfiguration("luxactive.oha.statistics", "?");
         ohaConfig.update(new Hashtable<>(
                 Map.of("oha.provider.template", ohaProviderTemplate, "bridge.provider", auroralProviderName,
@@ -257,7 +340,7 @@ public class LuxActiveBridgeTest {
 
         final AtomicReference<String> ohaProviderName = new AtomicReference<String>(
                 ohaProviderTemplate.formatted("31b45057-b469-4483-b05a-1de81e8483ed"));
-        waitForProvider(ohaProviderName.get());
+        waitForProviderStats(ohaProviderName.get());
 
         ServiceTracker<SimpleHistory, SimpleHistory> tracker = new ServiceTracker<>(ctx, SimpleHistory.class, null);
         tracker.open();
@@ -265,7 +348,7 @@ public class LuxActiveBridgeTest {
         tracker.close();
 
         // Call the history API
-        assertEquals(26, historyApi.getProvidedPaths().size()); // 13 per route
+        assertEquals(32, historyApi.getProvidedPaths().size());
         Instant fromTime = Instant.parse("2024-05-01T00:00:00Z");
         Instant toTime = Instant.parse("2024-05-02T00:00:00Z");
 
@@ -308,6 +391,10 @@ public class LuxActiveBridgeTest {
     void testTimezone() throws Exception {
         // Create a configuration for the oHA stats handler
         final String ohaProviderTemplate = "oha-history-tz-%s";
+
+        // Load providers
+        createProviders(ohaProviderTemplate);
+
         ohaConfig = cm.createFactoryConfiguration("luxactive.oha.statistics", "?");
         ohaConfig.update(new Hashtable<>(Map.of("oha.provider.template", ohaProviderTemplate, "bridge.provider",
                 auroralProviderName, "bridge.action", "logHourlyByDateRange", "bridge.action.service", "svc",
@@ -315,7 +402,7 @@ public class LuxActiveBridgeTest {
 
         final AtomicReference<String> ohaProviderName = new AtomicReference<String>(
                 ohaProviderTemplate.formatted("31b45057-b469-4483-b05a-1de81e8483ed"));
-        waitForProvider(ohaProviderName.get());
+        waitForProviderStats(ohaProviderName.get());
 
         ServiceTracker<SimpleHistory, SimpleHistory> tracker = new ServiceTracker<>(ctx, SimpleHistory.class, null);
         tracker.open();
@@ -323,7 +410,7 @@ public class LuxActiveBridgeTest {
         tracker.close();
 
         // Call the history API
-        assertEquals(26, historyApi.getProvidedPaths().size()); // 13 per route
+        assertEquals(32, historyApi.getProvidedPaths().size());
         Instant fromTime = Instant.parse("2024-05-01T00:00:00Z");
         Instant toTime = Instant.parse("2024-05-02T00:00:00Z");
 
