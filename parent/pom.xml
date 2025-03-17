@@ -33,7 +33,7 @@
     <bnd.version>7.0.0</bnd.version>
     <sensinact.version>0.0.2${changelist}</sensinact.version>
     <extras.version>0.0.5${changelist}</extras.version>
-    <logback.version>1.4.14</logback.version>
+    <logback.version>1.5.17</logback.version>
     <slf4j.version>2.0.11</slf4j.version>
     <jetty.version>11.0.13</jetty.version>
     <jackson.version>2.16.1</jackson.version>
