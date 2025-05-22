@@ -36,7 +36,7 @@
     <logback.version>1.4.14</logback.version>
     <slf4j.version>2.0.11</slf4j.version>
     <jetty.version>11.0.13</jetty.version>
-    <jackson.version>2.16.1</jackson.version>
+    <jackson.version>2.19.0</jackson.version>
   </properties>
 
   <repositories>
