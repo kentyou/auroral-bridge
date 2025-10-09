@@ -211,10 +211,10 @@ public class ActivityLoaderTest {
         assertInstanceOf(Point.class, rawLocation);
 
         Point location = (Point) rawLocation;
-        assertNotNull(location.coordinates);
-        assertEquals(68.41728, location.coordinates.latitude, 0.000001);
-        assertEquals(17.90582, location.coordinates.longitude, 0.000001);
-        assertTrue(Double.isNaN(location.coordinates.elevation));
+        assertNotNull(location.coordinates());
+        assertEquals(68.41728, location.coordinates().latitude(), 0.000001);
+        assertEquals(17.90582, location.coordinates().longitude(), 0.000001);
+        assertTrue(Double.isNaN(location.coordinates().elevation()));
     }
 
     @Test

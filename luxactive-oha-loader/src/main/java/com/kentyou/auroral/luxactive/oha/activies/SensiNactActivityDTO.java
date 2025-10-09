@@ -195,13 +195,8 @@ public class SensiNactActivityDTO {
             final LocationDTO loc = description.location;
             if (loc.longitude != null && loc.latitude != null && Double.isFinite(loc.longitude)
                     && Double.isFinite(loc.latitude)) {
-                final Point pt = new Point();
-                pt.coordinates = new Coordinates();
-                pt.coordinates.longitude = loc.longitude;
-                pt.coordinates.latitude = loc.latitude;
-                if (loc.altitude != null && Double.isFinite(loc.altitude)) {
-                    pt.coordinates.elevation = loc.altitude;
-                }
+                Double altitude = (loc.altitude == null || loc.altitude.isInfinite()) ? Double.NaN : loc.altitude;
+                final Point pt = new Point(new Coordinates(loc.longitude, loc.latitude, altitude), null, null);
 
                 dto.location = pt;
             }
